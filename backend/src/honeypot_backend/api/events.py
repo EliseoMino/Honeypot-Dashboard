@@ -16,7 +16,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from honeypot_backend.db.repository import DEFAULT_LIMIT, MAX_LIMIT, EventFilters, EventRepository
+from honeypot_backend.db.repository import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    AlertFilters,
+    AlertRepository,
+    EventFilters,
+    EventRepository,
+)
 from honeypot_backend.db.session import get_session
 from honeypot_backend.normalization.events import EventCategory, EventOutcome, NormalizedEvent
 
@@ -53,11 +60,12 @@ class EventSummary(BaseModel):
     auth_attempts: int = Field(description="Events in the authentication category")
     commands: int = Field(description="Events in the command category")
     alerts: int = Field(
-        default=0,
         description=(
-            "Always 0: detection rules and alerts (RF-11 and RF-12) are not "
-            "implemented yet, so there is nothing to count"
-        ),
+            "Alerts raised by the detection rules (RF-12) for the same source IP, "
+            "session and period as the filtered events. The event filters that "
+            "only make sense for events, such as the username or the free text "
+            "search, are not applied to this counter"
+        )
     )
     by_category: list[CountEntry]
     by_outcome: list[CountEntry]
@@ -138,7 +146,16 @@ async def events_summary(
 ) -> EventSummary:
     """Return aggregated counters for the filtered set of events."""
 
-    summary = await EventRepository(session).summary(filters)
+    repository = EventRepository(session)
+    summary = await repository.summary(filters)
+    summary["alerts"] = await AlertRepository(session).count(
+        AlertFilters(
+            source_ip=filters.source_ip,
+            session_id=filters.session_id,
+            occurred_from=filters.occurred_from,
+            occurred_to=filters.occurred_to,
+        )
+    )
     return EventSummary(**summary)
 
 

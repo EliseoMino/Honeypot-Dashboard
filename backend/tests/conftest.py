@@ -3,7 +3,7 @@
 Tests that talk to PostgreSQL are skipped unless ``TEST_DATABASE_URL`` points
 at a reachable database, so the suite is still useful without the local Docker
 stack running. That database is treated as disposable: the fixtures drop the
-RF-03 and RF-11 schema before and after every test that uses it.
+RF-03, RF-11 and RF-12 schema before and after every test that uses it.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ UNREACHABLE_URL = "postgresql+asyncpg://honeypot:honeypot@127.0.0.1:1/unused"
 #: Receipt time shared by the fixtures, so stored timestamps are predictable.
 RECEIVED_AT = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
 
-DROP_SCHEMA = "DROP TABLE IF EXISTS events, spool_cursors, schema_migrations CASCADE"
+DROP_SCHEMA = "DROP TABLE IF EXISTS alerts, detections, events, spool_cursors, schema_migrations CASCADE"
 
 
 def pytest_report_header() -> str:

@@ -52,6 +52,7 @@ class Detection:
     occurred_to: datetime
     event_count: int
     evidence: dict[str, Any]
+    severity: str = "medium"
     source_ip: str | None = None
     session_id: str | None = None
     fingerprint: str = ""
@@ -227,6 +228,7 @@ class AuthThresholdRuleEvaluator:
                     rule_id=self.spec.id,
                     rule_kind=self.spec.kind,
                     title=self.spec.title,
+                    severity=self.spec.severity,
                     source_ip=source_ip,
                     session_id=_single_session(burst),
                     occurred_from=start,
@@ -285,6 +287,7 @@ class CommandOfInterestRuleEvaluator:
                     rule_id=self.spec.id,
                     rule_kind=self.spec.kind,
                     title=self.spec.title,
+                    severity=self.spec.severity,
                     source_ip=row.source_ip,
                     session_id=row.session_id,
                     occurred_from=row.occurred_at,
@@ -331,6 +334,7 @@ class FileTransferRuleEvaluator:
                     rule_id=self.spec.id,
                     rule_kind=self.spec.kind,
                     title=self.spec.title,
+                    severity=self.spec.severity,
                     source_ip=row.source_ip,
                     session_id=row.session_id,
                     occurred_from=row.occurred_at,

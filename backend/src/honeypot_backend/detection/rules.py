@@ -27,6 +27,14 @@ MIN_THRESHOLD = 2
 MAX_THRESHOLD = 10_000
 MAX_EVIDENCE_EVENTS = 200
 
+#: Severity levels an alert can be raised with (RF-12). The value is what the
+#: dashboard and an operator order by, so it is a fixed ladder rather than a
+#: number the configuration could invent.
+SEVERITY_LEVELS = ("low", "medium", "high", "critical")
+DEFAULT_SEVERITY = "medium"
+
+Severity = Literal["low", "medium", "high", "critical"]
+
 DEFAULT_COMMANDS_OF_INTEREST: tuple[str, ...] = (
     # Downloading and transferring tooling.
     "wget",
@@ -90,6 +98,8 @@ class _Base(BaseModel):
     id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_]+$")
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=1000)
+    #: The level the alert raised for a match of this rule gets (RF-12).
+    severity: Severity = DEFAULT_SEVERITY
 
 
 class AuthThresholdRule(_Base):
@@ -176,6 +186,18 @@ class RulesFile(BaseModel):
         """Return the rules of one kind, in configuration order."""
 
         return tuple(rule for rule in self.rules if rule.kind == kind)
+
+    def by_id(self, rule_id: str) -> RuleSpec | None:
+        """Return the rule with this id, or ``None`` when it is not configured.
+
+        A stored detection can name a rule that has since been renamed or
+        removed, so callers must handle the missing case.
+        """
+
+        for rule in self.rules:
+            if rule.id == rule_id:
+                return rule
+        return None
 
 
 def load_rules(path: Path | None) -> RulesFile:

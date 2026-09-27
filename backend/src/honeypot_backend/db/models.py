@@ -1,4 +1,4 @@
-"""SQLAlchemy models for the stored events (RF-03).
+"""SQLAlchemy models for the stored events, detections and alerts.
 
 Common attributes are promoted to real columns so that they can be filtered,
 ordered and aggregated by the database. Everything event specific lives in the
@@ -15,6 +15,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -138,6 +139,7 @@ class Detection(Base):
         """Return a JSON serializable representation."""
 
         return {
+            "id": self.id,
             "rule_id": self.rule_id,
             "rule_kind": self.rule_kind,
             "title": self.title,
@@ -149,4 +151,67 @@ class Detection(Base):
             "evidence": self.evidence or {},
             "fingerprint": self.fingerprint,
             "detected_at": self.detected_at.isoformat() if self.detected_at else None,
+        }
+
+
+class Alert(Base):
+    """One alert raised by a detection rule (RF-12).
+
+    An alert is what an operator reads, so it repeats what was detected (type,
+    severity, source IP, session, span and evidence) instead of pointing only at
+    the detection. ``detection_id`` is unique: the same detection never raises a
+    second alert, however many times the rules are evaluated over it.
+    """
+
+    __tablename__ = "alerts"
+    __table_args__ = (
+        UniqueConstraint("detection_id", name="uq_alerts_detection_id"),
+        CheckConstraint(
+            "severity IN ('low', 'medium', 'high', 'critical')", name="ck_alerts_severity"
+        ),
+        CheckConstraint("occurred_to >= occurred_from", name="ck_alerts_window"),
+        Index("ix_alerts_generated_at", "generated_at"),
+        Index("ix_alerts_occurred_from", "occurred_from"),
+        Index("ix_alerts_source_ip", "source_ip"),
+        Index("ix_alerts_rule_id", "rule_id"),
+        Index("ix_alerts_severity", "severity"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    detection_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("detections.id", ondelete="CASCADE"), nullable=False
+    )
+    alert_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    rule_id: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_ip: Mapped[Any | None] = mapped_column(INET)
+    session_id: Mapped[str | None] = mapped_column(String(128))
+    occurred_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurred_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON serializable representation."""
+
+        return {
+            "id": self.id,
+            "detection_id": self.detection_id,
+            "alert_type": self.alert_type,
+            "severity": self.severity,
+            "rule_id": self.rule_id,
+            "title": self.title,
+            "description": self.description,
+            "source_ip": str(self.source_ip) if self.source_ip is not None else None,
+            "session_id": self.session_id,
+            "occurred_from": self.occurred_from.isoformat() if self.occurred_from else None,
+            "occurred_to": self.occurred_to.isoformat() if self.occurred_to else None,
+            "event_count": self.event_count,
+            "evidence": self.evidence or {},
+            "generated_at": self.generated_at.isoformat() if self.generated_at else None,
         }

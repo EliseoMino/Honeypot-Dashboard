@@ -14,15 +14,22 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, String, cast, distinct, func, or_, select
+from sqlalchemy import Select, String, case, cast, distinct, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from honeypot_backend.db.models import Detection, Event, SpoolCursor
+from honeypot_backend.db.models import Alert, Detection, Event, SpoolCursor
 from honeypot_backend.normalization.events import NormalizedEvent
 
 MAX_LIMIT = 500
 DEFAULT_LIMIT = 50
+
+#: Ranks the severity levels of RF-12 so alerts can be ordered by seriousness.
+_SEVERITY_RANK = case(
+    {"low": 0, "medium": 1, "high": 2, "critical": 3},
+    value=Alert.severity,
+    else_=0,
+)
 
 _EVENT_COLUMNS = (
     "event_id",
@@ -434,4 +441,154 @@ class DetectionRepository:
             total=int(total or 0),
             limit=clamp_limit(limit),
             offset=clamp_offset(offset),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AlertFilters:
+    """Filters accepted by the alert query endpoints."""
+
+    rule_id: str | None = None
+    alert_type: str | None = None
+    severity: str | None = None
+    source_ip: str | None = None
+    session_id: str | None = None
+    occurred_from: datetime | None = None
+    occurred_to: datetime | None = None
+
+    def conditions(self) -> list[Any]:
+        clauses: list[Any] = []
+        address = _as_ip(self.source_ip)
+        if address is not None:
+            clauses.append(Alert.source_ip == address)
+        if self.rule_id:
+            clauses.append(Alert.rule_id == self.rule_id)
+        if self.alert_type:
+            clauses.append(Alert.alert_type == self.alert_type)
+        if self.severity:
+            clauses.append(Alert.severity == self.severity)
+        if self.session_id:
+            clauses.append(Alert.session_id == self.session_id)
+        if self.occurred_from:
+            clauses.append(Alert.occurred_from >= self.occurred_from)
+        if self.occurred_to:
+            clauses.append(Alert.occurred_to <= self.occurred_to)
+        return clauses
+
+
+@dataclass(frozen=True, slots=True)
+class AlertPage:
+    """A page of raised alerts."""
+
+    items: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+class AlertRepository:
+    """Read and write access to the raised alerts (RF-12).
+
+    An alert is raised for a detection and never twice for the same one: the
+    insert ignores a ``detection_id`` that already has an alert, which is what
+    keeps a repeated evaluation of a rule from producing a duplicate alert.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @staticmethod
+    def insert_statement(records: Sequence[Mapping[str, Any]]) -> Any:
+        """Build the idempotent insert for a batch of alerts."""
+
+        return (
+            pg_insert(Alert.__table__)
+            .values([dict(record) for record in records])
+            .on_conflict_do_nothing(index_elements=["detection_id"])
+            .returning(Alert.id)
+        )
+
+    @staticmethod
+    def count_statement(filters: AlertFilters) -> Select[Any]:
+        """Build the statement that counts the alerts matching ``filters``."""
+
+        return select(func.count()).select_from(Alert).where(*filters.conditions())
+
+    @staticmethod
+    def page_statement(
+        filters: AlertFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> Select[Any]:
+        """Build the statement that returns one page of alerts.
+
+        Alerts are ordered by the severity first, so the ones that need looking
+        at come first, and by generation time within a level.
+        """
+
+        return (
+            select(Alert)
+            .where(*filters.conditions())
+            .order_by(
+                _SEVERITY_RANK[Alert.severity].desc(),
+                Alert.generated_at.desc(),
+                Alert.id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+
+    async def insert_alerts(self, alerts: Sequence[Any]) -> list[dict[str, Any]]:
+        """Store alerts and return the ones that were not raised before."""
+
+        if not alerts:
+            return []
+        records = [alert.to_record() for alert in alerts]
+        result = await self._session.execute(self.insert_statement(records))
+        stored_ids = list(result.scalars().all())
+        await self._session.flush()
+        if not stored_ids:
+            return []
+
+        rows = (
+            await self._session.execute(
+                select(Alert).where(Alert.id.in_(stored_ids)).order_by(Alert.id)
+            )
+        ).scalars().all()
+        return [row.to_dict() for row in rows]
+
+    async def list_alerts(
+        self,
+        filters: AlertFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> AlertPage:
+        """Return a page of alerts, the most severe and recent first."""
+
+        total = await self._session.scalar(self.count_statement(filters))
+        rows = (
+            await self._session.execute(
+                self.page_statement(filters, limit=clamp_limit(limit), offset=clamp_offset(offset))
+            )
+        ).scalars().all()
+        return AlertPage(
+            items=[row.to_dict() for row in rows],
+            total=int(total or 0),
+            limit=clamp_limit(limit),
+            offset=clamp_offset(offset),
+        )
+
+    async def get_alert(self, alert_id: int) -> dict[str, Any] | None:
+        """Return one alert, or ``None`` when it does not exist."""
+
+        row = await self._session.scalar(select(Alert).where(Alert.id == alert_id))
+        return row.to_dict() if row is not None else None
+
+    async def count(self, filters: AlertFilters | None = None) -> int:
+        """Count the alerts, for the summary of RF-04."""
+
+        return int(
+            await self._session.scalar(self.count_statement(filters or AlertFilters())) or 0
         )

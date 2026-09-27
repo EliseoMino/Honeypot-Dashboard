@@ -300,25 +300,6 @@ Alta
 
 Sí
 
-
-RF-13 — Consulta de alertas
-Descripción
-
-El sistema deberá permitir al usuario consultar las alertas generadas y acceder al detalle de cada una.
-
-Deberá ser posible filtrar las alertas por:
-
-    Severidad.
-
-    Tipo.
-
-    Fecha.
-
-    Dirección IP.
-
-Prioridad: Media
-MVP: No — segunda iteración.
-
 RF-13 — Consulta de alertas
 Descripción
 

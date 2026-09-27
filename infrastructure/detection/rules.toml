@@ -13,6 +13,8 @@
 #   title       short human readable name
 #   description what the rule means, shown by GET /api/v1/detections/rules
 #   kind        which implementation evaluates the rule
+#   severity    the level the alert raised for a match gets (RF-12): low,
+#               medium, high or critical. Defaults to medium.
 #
 # Change this file and restart the backend to apply a change.
 
@@ -35,6 +37,7 @@ configured period, which is what a password guessing attempt looks like.
 """
 threshold = 5
 window_seconds = 300
+severity = "high"
 event_types = ["auth.login_failed", "auth.login_success"]
 max_evidence_events = 50
 
@@ -86,6 +89,7 @@ commands = [
     "powershell",
     "certutil",
 ]
+severity = "medium"
 event_types = ["command.success", "command.failed", "command.input", "command.stdin"]
 
 # ---------------------------------------------------------------------------
@@ -102,4 +106,5 @@ description = """
 The honeypot was asked to download or to send a file, which is how a payload
 usually arrives.
 """
+severity = "medium"
 event_types = ["transfer.download", "transfer.download_failed", "transfer.upload"]

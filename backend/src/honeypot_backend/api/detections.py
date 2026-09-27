@@ -16,9 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from honeypot_backend.alerts import drafts_for_detections
 from honeypot_backend.db.repository import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
+    AlertRepository,
     DetectionFilters,
     DetectionRepository,
 )
@@ -32,6 +34,7 @@ router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
 class DetectionModel(BaseModel):
     """A stored detection, with the evidence that produced it."""
 
+    id: int
     rule_id: str
     rule_kind: str
     title: str
@@ -77,7 +80,11 @@ class DetectionRunResponse(BaseModel):
         description="Findings in the window, including the ones recorded before"
     )
     detections_created: int = Field(description="Findings stored by this run")
+    alerts_created: int = Field(
+        description="Alerts raised by this run (RF-12), one per new detection"
+    )
     items: list[DetectionModel] = Field(description="The findings this run stored")
+    alert_ids: list[int] = Field(description="The alerts this run raised")
 
 
 class RuleDescription(BaseModel):
@@ -87,6 +94,7 @@ class RuleDescription(BaseModel):
     kind: str
     title: str
     description: str
+    severity: str
     parameters: dict[str, Any]
 
 
@@ -105,21 +113,7 @@ async def list_rules(request: Request) -> RuleSet:
     """Report the rules this deployment evaluates and where they come from."""
 
     service: DetectionService = request.app.state.detection
-    described = service.describe()
-    common = {"id", "kind", "title", "description"}
-    return RuleSet(
-        available=described["available"],
-        path=described["path"],
-        error=described["error"],
-        version=described["version"],
-        rules=[
-            RuleDescription(
-                **{key: rule[key] for key in common},
-                parameters={key: value for key, value in rule.items() if key not in common},
-            )
-            for rule in described["rules"]
-        ],
-    )
+    return RuleSet(**service.describe())
 
 
 @router.post("/run", response_model=DetectionRunResponse, summary="Evaluate the rules")
@@ -128,7 +122,8 @@ async def run_detection(
     body: DetectionRunRequest,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DetectionRunResponse:
-    """Evaluate every rule over a window of events and store the findings."""
+    """Evaluate every rule over a window of events, store the findings and raise
+    an alert for each new one (RF-12)."""
 
     service: DetectionService = request.app.state.detection
     _require_available(service)
@@ -140,7 +135,13 @@ async def run_detection(
 
     engine = service.require_rules()
     found = await engine.run(session, occurred_from=occurred_from, occurred_to=occurred_to)
+
+    # Only a finding this run did not know about raises an alert, so evaluating
+    # the same activity again does not raise the same alert again.
     created = await DetectionRepository(session).insert_detections(found)
+    alerts = await AlertRepository(session).insert_alerts(
+        drafts_for_detections(created, service.rules)
+    )
     await session.commit()
 
     return DetectionRunResponse(
@@ -149,7 +150,9 @@ async def run_detection(
         rules_evaluated=engine.rule_count,
         detections_found=len(found),
         detections_created=len(created),
+        alerts_created=len(alerts),
         items=[DetectionModel(**record) for record in created],
+        alert_ids=[int(record["id"]) for record in alerts],
     )
 
 

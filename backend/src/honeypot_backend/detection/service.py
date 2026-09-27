@@ -45,17 +45,6 @@ class DetectionService:
         """Load the configured rules, keeping the error instead of raising."""
 
         path = resolve_rules_path(settings.detection_rules_path)
-        if path is None and settings.detection_rules_path is not None:
-            return cls(
-                engine=DetectionEngine(),
-                rules=RulesFile(),
-                path=None,
-                error=(
-                    f"the rule file {settings.detection_rules_path} was not found; "
-                    "set DETECTION_RULES_PATH to its location"
-                ),
-            )
-
         try:
             rules = load_rules(path)
         except RuleConfigError as exc:
@@ -79,14 +68,30 @@ class DetectionService:
         return self.engine
 
     def describe(self) -> dict[str, Any]:
-        """Return the rule set, for the endpoint that reports it."""
+        """Return the rule set, for the endpoint that reports it.
 
+        The fields every rule has are reported as they are, and the parameters
+        that only mean something to one kind of rule are grouped together, so a
+        consumer can show a rule without knowing every kind.
+        """
+
+        common = ("id", "kind", "title", "description", "severity")
         return {
             "available": self.available,
             "path": str(self.path) if self.path is not None else None,
             "error": self.error,
             "version": self.rules.version,
-            "rules": [rule.model_dump(mode="json") for rule in self.rules.rules],
+            "rules": [
+                {
+                    **{key: rule.model_dump(mode="json")[key] for key in common},
+                    "parameters": {
+                        key: value
+                        for key, value in rule.model_dump(mode="json").items()
+                        if key not in common
+                    },
+                }
+                for rule in self.rules.rules
+            ],
         }
 
     async def run(

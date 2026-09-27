@@ -173,11 +173,11 @@ async def test_the_summary_aggregates_the_stored_events(backend, cowrie_event) -
     }
 
 
-async def test_the_summary_reports_no_alerts_while_detection_is_missing(backend) -> None:
+async def test_the_summary_reports_no_alerts_while_none_were_raised(backend) -> None:
     response = await backend.client.get("/api/v1/events/summary")
 
-    # RF-11 and RF-12 are not implemented, so the RF-04 counter is a
-    # documented placeholder instead of a fabricated number.
+    # Nothing has been evaluated, so there is nothing to count. The counter is
+    # the real one now: see test_api_detections for the count after a run.
     assert response.json()["alerts"] == 0
 
 

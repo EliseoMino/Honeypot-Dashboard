@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from honeypot_backend import __version__
-from honeypot_backend.api import detections, events, health, ingest
+from honeypot_backend.api import alerts, detections, events, health, ingest
 from honeypot_backend.config import Settings, get_settings
 from honeypot_backend.db.session import apply_migrations, dispose_engines, get_engine
 from honeypot_backend.detection import DetectionService
@@ -90,4 +90,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(events.router)
     app.include_router(detections.router)
+    app.include_router(alerts.router)
     return app

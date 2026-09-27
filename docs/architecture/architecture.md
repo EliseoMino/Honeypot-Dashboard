@@ -34,11 +34,12 @@ The list is served by the API with the filters already applied, so the browser
 never downloads more than one page. `q` is a free text search; the type filter
 is a text input with the known types of the deployment offered as suggestions.
 
-### The alert counter is a placeholder
+### The alert counter counts raised alerts
 
-`alerts` in `/api/v1/events/summary` is always 0. Detection rules and alerts
-(RF-11 and RF-12) do not exist yet, and the dashboard says so under the
-counter instead of showing a number that could be mistaken for a real one.
+`alerts` in `/api/v1/events/summary` counts the alerts of RF-12 that match the
+same source IP, session and period as the filtered events. The filters that only
+mean something for events, such as the username or the free text search, are not
+applied to it.
 
 ### Development
 
@@ -117,6 +118,68 @@ builds the statements it needs (`insert_statement`, `count_statement`,
 `page_statement`) so the SQL can be reviewed and tested without a database.
 `/api/v1/events` exposes listing, ordering, filtering, search, pagination and
 aggregation, which is the base of RF-06, RF-07 and the dashboard.
+
+## Detection and alerts (RF-11, RF-12)
+
+Two tables sit next to `events`: `detections` records that a rule matched, and
+`alerts` reports the match to whoever is watching the dashboard. Both are keyed
+by something the data decides, not by a counter, so the same activity cannot be
+recorded twice.
+
+### Rules are configuration, not code
+
+`infrastructure/detection/rules.toml` holds every rule, and
+`DETECTION_RULES_PATH` points at it. The file is read once, when the backend
+starts, with `tomllib` and validated with Pydantic:
+
+- A rule declares `id`, `title`, `description`, `kind` and `severity`, plus the
+  parameters its kind needs. The three kinds are `auth_threshold` (several
+  authentication attempts from one IP inside a period), `command_of_interest`
+  (a command line that invoked a configured executable) and `file_transfer` (a
+  file the honeypot was asked to download or to send).
+- A configuration problem does not stop the backend: ingestion and the read API
+  keep working, `GET /api/v1/detections/rules` reports what is wrong, and
+  `POST /api/v1/detections/run` answers 503. Changing the file means restarting
+  the backend.
+
+### Rules run on demand
+
+There is no background evaluation. `POST /api/v1/detections/run` evaluates every
+rule over a window of stored events and returns what it found, so a run is
+reproducible and the answer is never older than the data that was asked about.
+`GET /api/v1/detections` reads the stored findings back.
+
+- The window is anchored on the first attempt of a burst of authentication
+  attempts, so attempts are never split between two windows and the same burst
+  is always recognised as the same one.
+- `invoked_commands()` reads the executables a command line really runs: it
+  follows pipelines, wrappers such as `sudo`, and the payload of `sh -c`, and it
+  reports the executable of each command, never its arguments, so
+  `grep wget auth.log` does not match `wget`.
+- Findings are sorted by time, rule and fingerprint, so two runs over the same
+  data return the same list in the same order.
+
+### A finding is identified, not counted
+
+A detection carries a SHA-256 `fingerprint` built from the rule and the subject
+it fired on: the IP and the start of the window for a burst, the event for a
+single event. `uq_detections_fingerprint` makes the insert of a finding the
+database already knows about a no-op.
+
+That is also what keeps the alerts of RF-12 free of duplicates. An alert is
+raised from a stored detection, not from the finding in memory, and
+`uq_alerts_detection_id` allows one alert per detection, so evaluating the same
+activity again raises nothing.
+
+An alert repeats the activity rather than pointing only at the detection: the
+alert type (the kind of the rule that fired), the severity declared by the rule,
+the source IP, the session, the span, and the evidence of the detection, in
+which `evidence.event_ids` identifies the events that triggered it.
+`GET /api/v1/alerts` lists them, the most severe and most recent first, and
+`GET /api/v1/alerts/{alert_id}` returns one with its evidence.
+
+The MVP asks for persistence and consultation only, so nothing is sent anywhere:
+no email, no Discord, no Telegram.
 
 ## Tests
 

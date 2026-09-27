@@ -12,6 +12,7 @@ from honeypot_backend.db.session import MIGRATIONS_DIR, apply_migrations, split_
 EVENTS_MIGRATION = "0001_events.sql"
 EVENTS_VERSION = EVENTS_MIGRATION.removesuffix(".sql")
 DETECTIONS_MIGRATION = "0002_detections.sql"
+ALERTS_MIGRATION = "0003_alerts.sql"
 
 #: Indexes RF-03 requires on the stored events.
 REQUIRED_INDEXES = {
@@ -27,6 +28,15 @@ REQUIRED_DETECTION_INDEXES = {
     "ix_detections_source_ip": "(source_ip)",
     "ix_detections_occurred_from": "(occurred_from)",
     "ix_detections_detected_at": "(detected_at",
+}
+
+#: Indexes RF-12 requires to look alerts up by level, rule, subject and time.
+REQUIRED_ALERT_INDEXES = {
+    "ix_alerts_generated_at": "(generated_at",
+    "ix_alerts_occurred_from": "(occurred_from)",
+    "ix_alerts_source_ip": "(source_ip)",
+    "ix_alerts_rule_id": "(rule_id)",
+    "ix_alerts_severity": "(severity)",
 }
 
 
@@ -100,6 +110,26 @@ def test_detections_migration_deduplicates_by_fingerprint() -> None:
     assert "source_ip inet" in flat
     assert "evidence jsonb not null" in flat
     assert "check (occurred_to >= occurred_from)" in flat
+
+
+def test_alerts_migration_declares_the_indexes_required_by_rf12() -> None:
+    flat = _flat(ALERTS_MIGRATION)
+
+    for index, columns in REQUIRED_ALERT_INDEXES.items():
+        assert f"create index if not exists {index} on alerts {columns}" in flat
+
+
+def test_an_alert_is_raised_once_per_detection() -> None:
+    flat = _flat(ALERTS_MIGRATION)
+
+    assert "constraint uq_alerts_detection_id unique (detection_id)" in flat
+    assert "references detections (id) on delete cascade" in flat
+    assert "source_ip inet" in flat
+    assert "evidence jsonb not null" in flat
+    assert (
+        "check (severity in ('low', 'medium', 'high', 'critical'))" in flat
+    ), "an alert can only carry a severity of the ladder"
+    assert "generated_at timestamptz not null default now()" in flat
 
 
 def test_orm_indexes_match_the_migrations() -> None:
