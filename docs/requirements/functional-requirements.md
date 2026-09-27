@@ -79,33 +79,42 @@ MVP: Hay que ver
 
 RF-06 — Consulta de eventos
 Descripción
-
 El sistema deberá permitir al usuario consultar los eventos almacenados.
-
 La consulta deberá permitir, como mínimo:
+* Visualizar los eventos.
+* Ordenarlos por fecha y hora.
+* Ordenarlos de forma ascendente o descendente.
+* Filtrarlos por tipo de evento.
+* Filtrarlos por dirección IP de origen.
+* Buscar eventos mediante texto.
+* Combinar múltiples filtros.
+* Navegar los resultados de forma paginada.
 
-    Visualizar eventos.
-
-    Ordenarlos por fecha.
-
-    Filtrarlos por tipo.
-
-    Filtrarlos por dirección IP.
-
-    Buscar eventos.
-
-Prioridad: Alta
-MVP: Sí
-
-RF-07 — Visualización del detalle de un evento
-Descripción
-
-El sistema deberá permitir seleccionar un evento y consultar toda la información disponible asociada al mismo.
-
-La información mostrada dependerá del tipo de evento.
+Los resultados deberán mostrar la información relevante del evento y permitir acceder a su información detallada mediante RF-07.
 
 Prioridad: Alta
+
 MVP: Sí
+
+
+# RF-07 — Visualización del detalle de un evento
+
+## Descripción
+
+El sistema deberá permitir al usuario seleccionar un evento y consultar toda la información disponible asociada al mismo.
+
+La información mostrada podrá variar según el tipo de evento y los datos disponibles.
+
+Cuando corresponda, el detalle deberá permitir identificar la relación del evento con otros elementos registrados, como una sesión o una dirección IP de origen.
+
+## Prioridad
+
+Alta
+
+## MVP
+
+Sí
+
 
 RF-08 — Consulta de sesiones
 Descripción
