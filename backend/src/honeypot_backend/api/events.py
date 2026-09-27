@@ -44,6 +44,28 @@ class EventPage(BaseModel):
     items: list[NormalizedEvent]
 
 
+class SeriesPoint(BaseModel):
+    """One period of the activity series of RF-05."""
+
+    bucket: str
+    count: int
+    auth: int = Field(description="Authentication events in the period")
+    commands: int = Field(description="Command events in the period")
+
+
+class TimeSeries(BaseModel):
+    """The activity series, oldest period first.
+
+    ``points`` only holds the periods that contain events. The gaps are real
+    information, so they are not filled with zeroes here: a client that cares
+    about a continuous axis can fill them, and one that only needs the busy
+    periods does not have to guess which ones to invent.
+    """
+
+    bucket: Literal["minute", "hour", "day"]
+    points: list[SeriesPoint] = Field(default_factory=list)
+
+
 class EventSummary(BaseModel):
     """Aggregated counters for a set of filters.
 
@@ -159,6 +181,33 @@ async def events_summary(
     return EventSummary(**summary)
 
 
+@router.get(
+    "/timeseries",
+    response_model=TimeSeries,
+    summary="How many events happened in each period",
+)
+async def event_timeseries(
+    filters: Annotated[EventFilters, Depends(_event_filters)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    bucket: Annotated[
+        Literal["minute", "hour", "day"],
+        Query(description="Width of each period"),
+    ] = "hour",
+) -> TimeSeries:
+    """Return the filtered events bucketed by time, oldest period first.
+
+    This is the series RF-05 draws. Only the periods that contain events come
+    back, so the dashboard has to render an absent period as a period without
+    activity: an empty stretch is what a lull in the attacks looks like, and
+    dropping it would flatten exactly the variation the requirement asks to see.
+    """
+
+    series = await EventRepository(session).timeseries(filters, bucket=bucket)
+    return TimeSeries(**series)
+
+
+# Declared last on purpose: the literal routes above would otherwise be
+# swallowed by the {event_id} parameter.
 @router.get("", response_model=EventPage, summary="List stored events")
 async def list_events(
     filters: Annotated[EventFilters, Depends(_event_filters)],

@@ -256,6 +256,118 @@ a:hover {
   font-size: 13px;
 }
 
+/* RF-05 chart, drawn as plain SVG so no charting library is needed. */
+.chart-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chart__canvas {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.chart__axis {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.chart__area {
+  stroke: none;
+  opacity: 0.5;
+}
+
+.chart__area--auth {
+  fill: var(--accent);
+}
+
+.chart__area--commands {
+  fill: var(--success);
+  opacity: 0.75;
+}
+
+.chart__cursor {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+/* Transparent target so the whole period is hoverable, not just the line. */
+.chart__hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+.chart__hit:focus-visible {
+  fill: var(--border);
+  outline: none;
+}
+
+.chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.chart__swatch--auth {
+  background: var(--accent);
+}
+
+.chart__swatch--commands {
+  background: var(--success);
+}
+
+.chart__swatch--total {
+  background: var(--accent);
+  border-radius: 999px;
+  height: 3px;
+}
+
+.chart__readout {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  min-height: 1.3em;
+}
+
 .link-list,
 .tag-list {
   list-style: none;

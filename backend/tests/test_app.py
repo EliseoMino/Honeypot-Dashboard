@@ -11,6 +11,7 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/ingest/stats"),
     ("GET", "/api/v1/events"),
     ("GET", "/api/v1/events/summary"),
+    ("GET", "/api/v1/events/timeseries"),
     ("GET", "/api/v1/events/{event_id}"),
     ("GET", "/api/v1/sessions"),
     ("GET", "/api/v1/commands"),

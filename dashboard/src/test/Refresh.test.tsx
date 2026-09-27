@@ -14,7 +14,14 @@ import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { REFRESH_INTERVALS, REFRESH_STORAGE_KEY } from "../hooks/useRefreshPreference";
 import { EventsPage } from "../pages/EventsPage";
 import { SummaryPage } from "../pages/SummaryPage";
-import { makePage, makeSummary, mockBackend, paths, type RecordedRequest } from "./fixtures";
+import {
+  makePage,
+  makeSummary,
+  makeTimeSeries,
+  mockBackend,
+  paths,
+  type RecordedRequest,
+} from "./fixtures";
 
 const FASTEST = REFRESH_INTERVALS[0].value;
 
@@ -28,6 +35,7 @@ function renderSummary() {
 
 function respond(url: URL) {
   if (url.pathname === "/api/v1/events/summary") return { body: makeSummary() };
+  if (url.pathname === "/api/v1/events/timeseries") return { body: makeTimeSeries() };
   if (url.pathname === "/api/v1/events") return { body: makePage() };
   return undefined;
 }
@@ -114,7 +122,9 @@ describe("RF-15 actualización automática", () => {
     renderSummary();
     await waitFor(() => expect(summaryCalls(calls)).toBe(1));
 
-    fireEvent.click(screen.getByLabelText("Actualización automática"));
+    // Awaited, not queried straight away: counting the request only proves it
+    // was sent, not that the controls are on screen yet.
+    fireEvent.click(await screen.findByLabelText("Actualización automática"));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FASTEST);
     });
@@ -129,7 +139,7 @@ describe("RF-15 actualización automática", () => {
     renderSummary();
     await waitFor(() => expect(summaryCalls(calls)).toBe(1));
 
-    fireEvent.click(screen.getByLabelText("Actualización automática"));
+    fireEvent.click(await screen.findByLabelText("Actualización automática"));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FASTEST * 3);
     });
@@ -156,7 +166,9 @@ describe("RF-15 actualización automática", () => {
       await vi.advanceTimersByTimeAsync(FASTEST * 3);
     });
 
-    expect(started).toBe(1);
+    // One per resource on the page: RF-05 added the activity series next to the
+    // counters, and neither of them may be asked for twice.
+    expect(started).toBe(2);
   });
 
   it("recarga una vez al volver a la pestaña", async () => {
@@ -218,7 +230,11 @@ describe("RF-15 actualización manual", () => {
 
     renderSummary();
 
-    expect(await screen.findByRole("combobox")).toHaveProperty("disabled", true);
+    // Named, because RF-05 added a second select to this page for the chart
+    // period, so "the only combobox" is no longer a thing.
+    expect(
+      await screen.findByLabelText("Intervalo de actualización automática"),
+    ).toHaveProperty("disabled", true);
   });
 });
 
@@ -231,9 +247,9 @@ describe("RF-15 preferencia recordada", () => {
 
     const checkbox = await screen.findByLabelText("Actualización automática");
     expect((checkbox as HTMLInputElement).checked).toBe(false);
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-      String(REFRESH_INTERVALS[1].value),
-    );
+    expect(
+      (screen.getByLabelText("Intervalo de actualización automática") as HTMLSelectElement).value,
+    ).toBe(String(REFRESH_INTERVALS[1].value));
   });
 
   it("usa la actualización automática por defecto", async () => {

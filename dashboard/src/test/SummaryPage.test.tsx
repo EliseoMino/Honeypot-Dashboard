@@ -3,7 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import { SummaryPage } from "../pages/SummaryPage";
-import { makeSummary, mockBackend, paths } from "./fixtures";
+import { mockBackend, paths, summaryBackend } from "./fixtures";
 
 function renderSummary() {
   return render(
@@ -15,7 +15,7 @@ function renderSummary() {
 
 describe("RF-04 dashboard de resumen", () => {
   it("muestra los seis indicadores pedidos", async () => {
-    mockBackend(() => ({ body: makeSummary() }));
+    mockBackend(summaryBackend());
 
     renderSummary();
 
@@ -32,7 +32,7 @@ describe("RF-04 dashboard de resumen", () => {
   });
 
   it("aclara cuando no hay ninguna alerta generada", async () => {
-    mockBackend(() => ({ body: makeSummary({ alerts: 0 }) }));
+    mockBackend(summaryBackend({ alerts: 0 }));
 
     renderSummary();
 
@@ -40,7 +40,7 @@ describe("RF-04 dashboard de resumen", () => {
   });
 
   it("muestra el número real de alertas generadas", async () => {
-    mockBackend(() => ({ body: makeSummary({ alerts: 3 }) }));
+    mockBackend(summaryBackend({ alerts: 3 }));
 
     renderSummary();
 
@@ -49,7 +49,7 @@ describe("RF-04 dashboard de resumen", () => {
   });
 
   it("detalla el rango temporal y los tipos más frecuentes", async () => {
-    mockBackend(() => ({ body: makeSummary() }));
+    mockBackend(summaryBackend());
 
     renderSummary();
 
@@ -59,8 +59,8 @@ describe("RF-04 dashboard de resumen", () => {
   });
 
   it("avisa cuando no hay eventos almacenados", async () => {
-    mockBackend(() => ({
-      body: makeSummary({
+    mockBackend(
+      summaryBackend({
         total_events: 0,
         unique_source_ips: 0,
         unique_sessions: 0,
@@ -73,7 +73,7 @@ describe("RF-04 dashboard de resumen", () => {
         by_protocol: [],
         top_event_types: [],
       }),
-    }));
+    );
 
     renderSummary();
 
@@ -89,9 +89,12 @@ describe("RF-04 dashboard de resumen", () => {
     renderSummary();
 
     expect(await screen.findByRole("alert")).toBeDefined();
-    expect(paths(calls)).toEqual(["/api/v1/events/summary"]);
+    expect(paths(calls)).toEqual([
+      "/api/v1/events/summary",
+      "/api/v1/events/timeseries?bucket=hour",
+    ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(paths(calls).length).toBe(2));
+    await waitFor(() => expect(paths(calls).length).toBe(4));
   });
 });

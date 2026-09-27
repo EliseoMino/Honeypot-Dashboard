@@ -13,6 +13,7 @@ import type {
   SourceActivity,
   SourceDetail,
   SourcePage,
+  TimeSeries,
 } from "../api/types";
 
 export interface RecordedRequest {
@@ -252,6 +253,36 @@ export function makeSourceDetail(overrides: Partial<SourceDetail> = {}): SourceD
       { key: "command", count: 25 },
     ],
     ...overrides,
+  };
+}
+
+export function makeTimeSeries(overrides: Partial<TimeSeries> = {}): TimeSeries {
+  return {
+    bucket: "hour",
+    points: [
+      { bucket: "2026-03-01T10:00:00+00:00", count: 2, auth: 2, commands: 0 },
+      { bucket: "2026-03-01T11:00:00+00:00", count: 7, auth: 1, commands: 6 },
+      { bucket: "2026-03-01T12:00:00+00:00", count: 1, auth: 0, commands: 1 },
+    ],
+    ...overrides,
+  };
+}
+
+/**
+ * A backend that answers the summary page: the counters and, since RF-05 put a
+ * chart on the same page, the activity series. Tests that only care about the
+ * counters can ignore the second response.
+ */
+export function summaryBackend(
+  summary: Partial<EventSummary> = {},
+  series: Partial<TimeSeries> = {},
+): (url: URL) => { body: unknown } {
+  return (url: URL) => {
+    if (url.pathname === "/api/v1/events/summary") return { body: makeSummary(summary) };
+    if (url.pathname === "/api/v1/events/timeseries") {
+      return { body: makeTimeSeries(series) };
+    }
+    return { body: null };
   };
 }
 

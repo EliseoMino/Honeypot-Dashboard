@@ -16,6 +16,8 @@ import type {
   SessionPage,
   SourceDetail,
   SourcePage,
+  TimeBucket,
+  TimeSeries,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -119,6 +121,13 @@ function queryString(params: Record<string, string | number | undefined>): strin
 
 export function fetchSummary(signal?: AbortSignal): Promise<EventSummary> {
   return request<EventSummary>("/api/v1/events/summary", signal);
+}
+
+export function fetchTimeSeries(
+  bucket: TimeBucket,
+  signal?: AbortSignal,
+): Promise<TimeSeries> {
+  return request<TimeSeries>(`/api/v1/events/timeseries${queryString({ bucket })}`, signal);
 }
 
 export function fetchEventPage(query: EventQuery, signal?: AbortSignal): Promise<EventPage> {

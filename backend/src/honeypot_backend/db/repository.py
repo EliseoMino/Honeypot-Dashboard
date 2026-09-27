@@ -24,6 +24,10 @@ from honeypot_backend.normalization.events import NormalizedEvent
 MAX_LIMIT = 500
 DEFAULT_LIMIT = 50
 
+#: Time bucket widths RF-05 accepts. Passed to date_trunc as a bind parameter,
+#: so nothing from the request reaches the SQL text.
+BUCKETS = ("minute", "hour", "day")
+
 #: Ranks the severity levels of RF-12 so alerts can be ordered by seriousness.
 _SEVERITY_RANK = case(
     {"low": 0, "medium": 1, "high": 2, "critical": 3},
@@ -292,6 +296,52 @@ class EventRepository:
             "by_outcome": by_outcome,
             "by_protocol": by_protocol,
             "top_event_types": top_types,
+        }
+
+    async def timeseries(
+        self,
+        filters: EventFilters,
+        *,
+        bucket: str = "hour",
+    ) -> dict[str, Any]:
+        """Count the filtered events per time bucket, oldest bucket first.
+
+        RF-05 asks for the evolution of the events over time, so this is the
+        same grouped read as the rest of the API, bucketed by the event time.
+        Buckets with no events are kept as zero rows: a gap in the series is
+        information, because it is what a lull in the attacks looks like.
+        """
+
+        if bucket not in BUCKETS:
+            raise ValueError(f"unsupported bucket: {bucket}")
+
+        conditions = filters.conditions()
+        truncated = func.date_trunc(bucket, Event.occurred_at)
+        rows = (
+            await self._session.execute(
+                select(
+                    truncated.label("bucket"),
+                    func.count().label("count"),
+                    func.count().filter(Event.event_category == "authentication").label("auth"),
+                    func.count().filter(Event.event_category == "command").label("commands"),
+                )
+                .where(*conditions)
+                .group_by(truncated)
+                .order_by(truncated)
+            )
+        ).all()
+
+        return {
+            "bucket": bucket,
+            "points": [
+                {
+                    "bucket": row.bucket.isoformat(),
+                    "count": int(row.count or 0),
+                    "auth": int(row.auth or 0),
+                    "commands": int(row.commands or 0),
+                }
+                for row in rows
+            ],
         }
 
     async def _group_count(

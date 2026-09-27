@@ -183,8 +183,7 @@ export interface CommandPage {
   items: CommandRecord[];
 }
 
-/** Types mirroring `honeypot_backend.api.sources` (RF-10). */
-export interface SourceActivity {
+/** Types mirroring `honeypot_backend.api.sources` (RF-10). */export interface SourceActivity {
   source_ip: string;
   event_count: number;
   session_count: number;
@@ -206,4 +205,19 @@ export interface SourcePage {
 
 export interface SourceDetail extends SourceActivity {
   by_category: CountEntry[];
+}
+
+/** Types mirroring `honeypot_backend.api.events` (RF-05). */
+export type TimeBucket = "minute" | "hour" | "day";
+
+export interface SeriesPoint {
+  bucket: string;
+  count: number;
+  auth: number;
+  commands: number;
+}
+
+export interface TimeSeries {
+  bucket: TimeBucket;
+  points: SeriesPoint[];
 }
