@@ -61,8 +61,11 @@ class EventFilters:
 
     def conditions(self) -> list[Any]:
         clauses: list[Any] = []
-        if self.source_ip:
-            clauses.append(cast(Event.source_ip, String) == self.source_ip)
+        address = _as_ip(self.source_ip)
+        if address is not None:
+            # Compared as INET, not as text: PostgreSQL renders an INET with its
+            # mask ("198.51.100.9/32"), so a text comparison never matches.
+            clauses.append(Event.source_ip == address)
         if self.session_id:
             clauses.append(Event.session_id == self.session_id)
         if self.username:
@@ -84,7 +87,7 @@ class EventFilters:
                     Event.username.ilike(pattern),
                     Event.session_id.ilike(pattern),
                     Event.event_type.ilike(pattern),
-                    cast(Event.source_ip, String).ilike(pattern),
+                    func.host(Event.source_ip).ilike(pattern),
                     cast(Event.details, String).ilike(pattern),
                 )
             )
@@ -141,21 +144,65 @@ def _as_ip(value: Any) -> Any:
         return None
 
 
+def clamp_limit(limit: int) -> int:
+    """Keep a requested page size inside the allowed range."""
+
+    return max(1, min(limit, MAX_LIMIT))
+
+
+def clamp_offset(offset: int) -> int:
+    """Keep a requested offset non negative."""
+
+    return max(0, offset)
+
+
 class EventRepository:
     """Read and write access to the stored events."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def insert_statement(records: Sequence[Mapping[str, Any]]) -> Any:
+        """Build the idempotent insert for a batch of normalized events."""
+
+        return (
+            pg_insert(Event.__table__)
+            .values([_to_row(record) for record in records])
+            .on_conflict_do_nothing(index_elements=["event_id"])
+        )
+
+    @staticmethod
+    def count_statement(filters: EventFilters) -> Select[Any]:
+        """Build the statement that counts the events matching ``filters``."""
+
+        return select(func.count()).select_from(Event).where(*filters.conditions())
+
+    @staticmethod
+    def page_statement(
+        filters: EventFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+        order: str = "desc",
+    ) -> Select[Any]:
+        """Build the statement that returns one ordered page of events."""
+
+        ordering = Event.occurred_at.asc() if order == "asc" else Event.occurred_at.desc()
+        return (
+            select(Event)
+            .where(*filters.conditions())
+            .order_by(ordering, Event.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
     async def insert_events(self, records: Sequence[Mapping[str, Any]]) -> int:
         """Insert normalized events, ignoring the ones already stored."""
 
-        rows = [_to_row(record) for record in records]
-        if not rows:
+        if not records:
             return 0
-        statement = pg_insert(Event.__table__).values(rows)
-        statement = statement.on_conflict_do_nothing(index_elements=["event_id"])
-        result = await self._session.execute(statement)
+        result = await self._session.execute(self.insert_statement(records))
         await self._session.flush()
         return result.rowcount or 0
 
@@ -172,27 +219,23 @@ class EventRepository:
     ) -> EventPage:
         """Return a filtered, ordered page of events plus the total count."""
 
-        limit = max(1, min(limit, MAX_LIMIT))
-        offset = max(0, offset)
-        ordering = Event.occurred_at.asc() if order == "asc" else Event.occurred_at.desc()
-        conditions = filters.conditions()
-
-        total = await self._session.scalar(
-            select(func.count()).select_from(Event).where(*conditions)
-        )
-        statement: Select[Any] = (
-            select(Event).where(*conditions).order_by(ordering, Event.id.desc()).limit(limit).offset(offset)
+        total = await self._session.scalar(self.count_statement(filters))
+        statement = self.page_statement(
+            filters,
+            limit=clamp_limit(limit),
+            offset=clamp_offset(offset),
+            order=order,
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return EventPage(
             items=[row.to_dict() for row in rows],
             total=int(total or 0),
-            limit=limit,
-            offset=offset,
+            limit=clamp_limit(limit),
+            offset=clamp_offset(offset),
         )
 
     async def get_event(self, event_id: str) -> dict[str, Any] | None:
-        row = await self._session.get(Event, event_id, primary_key=Event.event_id)
+        row = await self._session.scalar(select(Event).where(Event.event_id == event_id))
         return row.to_dict() if row is not None else None
 
     async def summary(self, filters: EventFilters) -> dict[str, Any]:
@@ -243,14 +286,19 @@ class EventRepository:
         return [{"key": row[0], "count": int(row[1])} for row in rows]
 
     async def get_cursor(self, path: str) -> int:
-        offset = await self._session.scalar(select(SpoolCursor.offset).where(SpoolCursor.path == path))
+        offset = await self._session.scalar(
+            select(SpoolCursor.byte_offset).where(SpoolCursor.path == path)
+        )
         return int(offset or 0)
 
     async def set_cursor(self, path: str, offset: int) -> None:
         statement = (
             pg_insert(SpoolCursor.__table__)
-            .values(path=path, offset=offset)
-            .on_conflict_do_update(index_elements=["path"], set_={"offset": offset})
+            .values(path=path, byte_offset=offset)
+            .on_conflict_do_update(
+                index_elements=["path"],
+                set_={"byte_offset": offset, "updated_at": func.now()},
+            )
         )
         await self._session.execute(statement)
         await self._session.flush()

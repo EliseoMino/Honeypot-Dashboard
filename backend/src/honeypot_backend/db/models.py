@@ -30,6 +30,7 @@ class Event(Base):
         Index("ix_events_source_ip", "source_ip"),
         Index("ix_events_event_type", "event_type"),
         Index("ix_events_session_id", "session_id"),
+        Index("ix_events_event_category", "event_category"),
         Index("ix_events_session_occurred_at", "session_id", "occurred_at"),
     )
 
@@ -84,7 +85,7 @@ class SpoolCursor(Base):
     __tablename__ = "spool_cursors"
 
     path: Mapped[str] = mapped_column(Text, primary_key=True)
-    offset: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    byte_offset: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )

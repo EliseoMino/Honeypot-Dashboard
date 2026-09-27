@@ -143,10 +143,12 @@ def ingest_stats(request: Request) -> dict[str, Any]:
     """Expose ingestion counters, spool state and required event coverage."""
 
     settings = _settings(request)
+    replayer = getattr(request.app.state, "replayer", None)
     return {
         "spool_dir": str(settings.spool_dir),
         "max_batch_events": settings.max_batch_events,
         "metrics": _metrics(request).snapshot(),
         "spool": _spool(request).stats(),
         "dedupe_window_size": len(_dedupe(request)),
+        "replayer": replayer.stats() if replayer is not None else None,
     }

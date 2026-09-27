@@ -30,9 +30,10 @@ CREATE INDEX IF NOT EXISTS ix_events_session_occurred_at   ON events (session_id
 CREATE INDEX IF NOT EXISTS ix_events_event_category        ON events (event_category);
 
 -- Read position of the normalized spool, so loading into PostgreSQL resumes
--- exactly where it stopped.
+-- exactly where it stopped. The column is named byte_offset because OFFSET is
+-- a reserved word in PostgreSQL.
 CREATE TABLE IF NOT EXISTS spool_cursors (
-    path       TEXT        PRIMARY KEY,
-    offset     BIGINT      NOT NULL DEFAULT 0,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    path        TEXT        PRIMARY KEY,
+    byte_offset BIGINT      NOT NULL DEFAULT 0,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

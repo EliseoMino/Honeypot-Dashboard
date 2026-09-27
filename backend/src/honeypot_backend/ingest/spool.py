@@ -65,6 +65,10 @@ class _AppendStream:
         self.files_created = 0
 
     @property
+    def directory(self) -> Path:
+        return self._directory
+
+    @property
     def path(self) -> Path | None:
         return self._path
 
@@ -159,6 +163,12 @@ class EventSpool:
             fsync=fsync,
             clock=clock,
         )
+
+    @property
+    def normalized_dir(self) -> Path:
+        """Directory holding the normalized event stream (RF-03 input)."""
+
+        return self._normalized.directory
 
     def write_raw(self, records: Iterable[Mapping[str, Any]]) -> Path | None:
         with self._lock:

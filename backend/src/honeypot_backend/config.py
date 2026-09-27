@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     spool_replay_enabled: bool = True
     spool_replay_interval: float = 1.0
     spool_replay_batch_size: int = 500
+    spool_replay_error_backoff: float = 5.0
 
     @property
     def tls_version(self) -> ssl.TLSVersion:
