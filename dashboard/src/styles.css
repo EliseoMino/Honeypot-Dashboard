@@ -120,6 +120,46 @@ a:hover {
   font-size: 13px;
 }
 
+/* Refresh (RF-15) */
+
+.refresh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.refresh__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.refresh__interval select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.refresh__interval select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.refresh__state {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Controls */
 
 .button {

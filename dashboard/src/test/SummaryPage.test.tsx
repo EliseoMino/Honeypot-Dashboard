@@ -31,12 +31,21 @@ describe("RF-04 dashboard de resumen", () => {
     expect(screen.getByText("25")).toBeDefined();
   });
 
-  it("aclara que el contador de alertas es un marcador de posición", async () => {
-    mockBackend(() => ({ body: makeSummary() }));
+  it("aclara cuando no hay ninguna alerta generada", async () => {
+    mockBackend(() => ({ body: makeSummary({ alerts: 0 }) }));
 
     renderSummary();
 
-    expect(await screen.findByText(/Pendiente de RF-11 y RF-12/)).toBeDefined();
+    expect(await screen.findByText(/Ninguna regla ha detectado actividad/)).toBeDefined();
+  });
+
+  it("muestra el número real de alertas generadas", async () => {
+    mockBackend(() => ({ body: makeSummary({ alerts: 3 }) }));
+
+    renderSummary();
+
+    expect(await screen.findByText("Alertas generadas")).toBeDefined();
+    expect(screen.getByText("3")).toBeDefined();
   });
 
   it("detalla el rango temporal y los tipos más frecuentes", async () => {

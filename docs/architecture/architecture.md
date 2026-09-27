@@ -41,6 +41,36 @@ same source IP, session and period as the filtered events. The filters that only
 mean something for events, such as the username or the free text search, are not
 applied to it.
 
+### Data that refreshes by itself (RF-15)
+
+A monitoring dashboard is left open on a screen, so the numbers on it cannot be
+a snapshot taken when the page was opened. The views that show data, the summary
+and the event list, refresh in two ways:
+
+- The `Actualizar` button reloads on demand, which is the manual path.
+- The `Actualización automática` switch reloads every 10 s, 30 s, 1 min or 5 min,
+  which is the periodic path a first version asks for. The choice and the period
+  are kept in `localStorage`, because how often somebody wants to watch a
+  dashboard is a property of the operator, not of the URL a page is shared
+  with. Automatic refresh is on by default, every minute.
+
+`useAutoRefresh` owns the behaviour and the rules are deliberately narrow:
+
+- A tick while a request is still in flight is skipped, so a slow backend cannot
+  pile requests up.
+- Returning to the tab reloads once, because that is when stale data is most
+  visible.
+- Turning the switch off removes the timer and the visibility listener, so a
+  dashboard read on demand never talks to the backend on its own.
+
+`useResource` reports `updatedAt`, when the data on screen was loaded, and the
+controls show it, so an operator can tell a number that is old from one that is
+not. A refresh that fails leaves the previous data on screen with the error,
+instead of blanking the view.
+
+The event detail page is not refreshed automatically: a stored event does not
+change, and the related activity it links to is already one click away.
+
 ### Development
 
 ```bash
@@ -63,7 +93,8 @@ behind one reverse proxy.
 
 Tests use Vitest with jsdom and Testing Library. There is no browser test:
 component behaviour is covered with a recording `fetch` stub, so the assertions
-are about what the dashboard requests and renders, not about visual layout.
+are about what the dashboard requests and renders, not about visual layout. The
+refresh tests use fake timers, because the requirement is about time passing.
 
 ## Event storage (RF-03)
 

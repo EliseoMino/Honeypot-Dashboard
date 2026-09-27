@@ -11,6 +11,9 @@ import {
   type EventFilterValues,
 } from "../components/EventFilters";
 import { Pagination } from "../components/Pagination";
+import { RefreshControls } from "../components/RefreshControls";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
+import { useRefreshPreference } from "../hooks/useRefreshPreference";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime, formatNumber } from "../utils/format";
 
@@ -77,6 +80,15 @@ export function EventsPage(): ReactNode {
       .map((entry) => entry.key)
       .filter((key): key is string => key !== null) ?? [];
 
+  // RF-15: the list refreshes by itself, keeping the filters and the page.
+  const preference = useRefreshPreference();
+  useAutoRefresh({
+    enabled: preference.enabled,
+    intervalMs: preference.intervalMs,
+    reload: page.reload,
+    busy: page.loading,
+  });
+
   const changeParams = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(params);
     mutate(next);
@@ -120,9 +132,12 @@ export function EventsPage(): ReactNode {
             {isFiltered(filters) ? "Resultados filtrados" : "Todos los eventos almacenados"}
           </p>
         </div>
-        <button type="button" className="button" onClick={page.reload}>
-          Actualizar
-        </button>
+        <RefreshControls
+          onReload={page.reload}
+          loading={page.loading}
+          updatedAt={page.updatedAt}
+          preference={preference}
+        />
       </header>
 
       <EventFilters

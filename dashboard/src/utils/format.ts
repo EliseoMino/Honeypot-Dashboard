@@ -23,6 +23,12 @@ export function formatTime(value: string | null | undefined): string {
   return Number.isNaN(parsed.getTime()) ? value : TIME_ONLY.format(parsed);
 }
 
+/** The moment a refresh loaded the data, as the local clock shows it. */
+export function formatClock(moment: number | null): string {
+  if (moment === null) return "—";
+  return TIME_ONLY.format(new Date(moment));
+}
+
 export function formatNumber(value: number | null | undefined): string {
   return new Intl.NumberFormat("es-ES").format(value ?? 0);
 }

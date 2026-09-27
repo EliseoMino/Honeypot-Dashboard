@@ -4,15 +4,29 @@ import { fetchSummary } from "../api/client";
 import { BreakdownList } from "../components/BreakdownList";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import { MetricCard } from "../components/MetricCard";
+import { RefreshControls } from "../components/RefreshControls";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
+import { useRefreshPreference } from "../hooks/useRefreshPreference";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime } from "../utils/format";
 
 /** RF-04 — resumen de la actividad registrada por el honeypot. */
 export function SummaryPage(): ReactNode {
   const summary = useResource((signal) => fetchSummary(signal), []);
+  const preference = useRefreshPreference();
+  useAutoRefresh({
+    enabled: preference.enabled,
+    intervalMs: preference.intervalMs,
+    reload: summary.reload,
+    busy: summary.loading,
+  });
 
   if (summary.error !== null) {
-    return <ErrorBanner message={summary.error} onRetry={summary.reload} />;
+    return (
+      <div className="page">
+        <ErrorBanner message={summary.error} onRetry={summary.reload} />
+      </div>
+    );
   }
   if (summary.data === null) {
     return <Loading label="Consultando el resumen" />;
@@ -30,9 +44,12 @@ export function SummaryPage(): ReactNode {
             {formatDateTime(data.last_event_at)}
           </p>
         </div>
-        <button type="button" className="button" onClick={summary.reload}>
-          Actualizar
-        </button>
+        <RefreshControls
+          onReload={summary.reload}
+          loading={summary.loading}
+          updatedAt={summary.updatedAt}
+          preference={preference}
+        />
       </header>
 
       <div className="metrics">
@@ -52,7 +69,7 @@ export function SummaryPage(): ReactNode {
         <MetricCard
           label="Alertas generadas"
           value={data.alerts}
-          hint="Pendiente de RF-11 y RF-12: siempre 0"
+          hint={data.alerts === 0 ? "Ninguna regla ha detectado actividad" : undefined}
         />
       </div>
 
