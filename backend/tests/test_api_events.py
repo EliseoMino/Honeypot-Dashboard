@@ -164,11 +164,21 @@ async def test_the_summary_aggregates_the_stored_events(backend, cowrie_event) -
     assert payload["total_events"] == 3
     assert payload["unique_source_ips"] == 1
     assert payload["unique_sessions"] == 2
+    assert payload["auth_attempts"] == 1
+    assert payload["commands"] == 1
     assert {entry["key"] for entry in payload["by_category"]} == {
         "session",
         "authentication",
         "command",
     }
+
+
+async def test_the_summary_reports_no_alerts_while_detection_is_missing(backend) -> None:
+    response = await backend.client.get("/api/v1/events/summary")
+
+    # RF-11 and RF-12 are not implemented, so the RF-04 counter is a
+    # documented placeholder instead of a fabricated number.
+    assert response.json()["alerts"] == 0
 
 
 async def test_an_empty_database_answers_without_events(backend) -> None:

@@ -250,6 +250,8 @@ class EventRepository:
                 func.count(distinct(Event.username)),
                 func.min(Event.occurred_at),
                 func.max(Event.occurred_at),
+                func.count().filter(Event.event_category == "authentication"),
+                func.count().filter(Event.event_category == "command"),
             ).where(*conditions)
         )
         row = totals.one()
@@ -265,6 +267,8 @@ class EventRepository:
             "unique_usernames": int(row[3] or 0),
             "first_event_at": row[4].isoformat() if row[4] else None,
             "last_event_at": row[5].isoformat() if row[5] else None,
+            "auth_attempts": int(row[6] or 0),
+            "commands": int(row[7] or 0),
             "by_category": by_category,
             "by_outcome": by_outcome,
             "by_protocol": by_protocol,

