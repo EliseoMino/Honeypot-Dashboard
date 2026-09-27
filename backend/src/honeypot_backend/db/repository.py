@@ -151,6 +151,18 @@ def _as_ip(value: Any) -> Any:
         return None
 
 
+def _as_str_list(value: Any) -> list[str]:
+    """Normalize a PostgreSQL text array into a plain sorted list.
+
+    ``array_agg`` returns a list, but it is ``None`` when the filter removed
+    every element, so the aggregate always yields a list for the API.
+    """
+
+    if value is None:
+        return []
+    return sorted({str(item) for item in value})
+
+
 def clamp_limit(limit: int) -> int:
     """Keep a requested page size inside the allowed range."""
 
@@ -295,6 +307,215 @@ class EventRepository:
             statement = statement.limit(limit)
         rows = (await self._session.execute(statement)).all()
         return [{"key": row[0], "count": int(row[1])} for row in rows]
+
+    async def count_filtered(self, filters: EventFilters) -> int:
+        """Count the events matching a filter, ignoring pagination."""
+
+        return int(await self._session.scalar(self.count_statement(filters)) or 0)
+
+    # RF-08: sessions are derived from the events, not stored separately, so the
+    # group by needs a non null session id to produce one row per session.
+
+    async def list_sessions(
+        self,
+        filters: EventFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Summarize each session: who connected, when, and for how long."""
+
+        conditions = [*filters.conditions(), Event.session_id.is_not(None)]
+        # Aggregated rather than grouped: host() is a function call, so it is not
+        # a valid GROUP BY key, and picking one value keeps exactly one row per
+        # session even if the events disagreed about the address.
+        source_ip = func.min(func.host(Event.source_ip))
+        first_seen = func.min(Event.occurred_at)
+        last_seen = func.max(Event.occurred_at)
+        span = func.extract("epoch", last_seen - first_seen)
+
+        columns = (
+            Event.session_id.label("session_id"),
+            source_ip.label("source_ip"),
+            first_seen.label("first_seen"),
+            last_seen.label("last_seen"),
+            (span * 1000).label("duration_ms"),
+            func.count().label("event_count"),
+            func.count(distinct(Event.session_id)).label("session_count"),
+            func.array_agg(distinct(Event.username))
+            .filter(Event.username.is_not(None))
+            .label("usernames"),
+            func.array_agg(distinct(Event.protocol))
+            .filter(Event.protocol.is_not(None))
+            .label("protocols"),
+            func.bool_or(Event.event_category == "authentication").label("has_authentication"),
+            func.bool_or(Event.outcome == "success").label("has_success"),
+        )
+
+        total = int(
+            await self._session.scalar(
+                select(func.count(distinct(Event.session_id))).where(*conditions)
+            )
+            or 0
+        )
+        rows = (
+            await self._session.execute(
+                select(*columns)
+                .where(*conditions)
+                .group_by(Event.session_id)
+                .order_by(last_seen.desc())
+                .limit(clamp_limit(limit))
+                .offset(clamp_offset(offset))
+            )
+        ).all()
+
+        return {
+            "total": total,
+            "limit": clamp_limit(limit),
+            "offset": clamp_offset(offset),
+            "items": [self._session_row(row) for row in rows],
+        }
+
+    # RF-09: the command text lives in details, so it is read from the JSONB
+    # rather than from a column.
+
+    async def list_commands(
+        self,
+        filters: EventFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """List the commands recorded, newest first."""
+
+        conditions = [*filters.conditions(), Event.event_category == "command"]
+        columns = (
+            Event.event_id.label("event_id"),
+            Event.event_type.label("event_type"),
+            Event.occurred_at.label("occurred_at"),
+            func.host(Event.source_ip).label("source_ip"),
+            Event.session_id.label("session_id"),
+            Event.username.label("username"),
+            Event.outcome.label("outcome"),
+            Event.details["command"].astext.label("command"),
+            Event.details["command_line"].astext.label("command_line"),
+        )
+        total = int(await self._session.scalar(select(func.count()).where(*conditions)) or 0)
+        rows = (
+            await self._session.execute(
+                select(*columns)
+                .where(*conditions)
+                .order_by(Event.occurred_at.desc(), Event.id.desc())
+                .limit(clamp_limit(limit))
+                .offset(clamp_offset(offset))
+            )
+        ).all()
+        return {
+            "total": total,
+            "limit": clamp_limit(limit),
+            "offset": clamp_offset(offset),
+            "items": [self._command_row(row) for row in rows],
+        }
+
+    # RF-10: activity per source address, the unit an analyst starts from.
+
+    async def list_source_activity(
+        self,
+        filters: EventFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Summarize the activity of each source IP."""
+
+        conditions = [*filters.conditions(), Event.source_ip.is_not(None)]
+        source_ip = func.host(Event.source_ip)
+        first_seen = func.min(Event.occurred_at)
+        last_seen = func.max(Event.occurred_at)
+        columns = (
+            source_ip.label("source_ip"),
+            func.count().label("event_count"),
+            func.count(distinct(Event.session_id)).label("session_count"),
+            func.count().filter(Event.event_category == "authentication").label("auth_attempts"),
+            func.count().filter(Event.event_category == "command").label("commands"),
+            func.count().filter(Event.event_category == "transfer").label("transfers"),
+            func.count()
+            .filter(Event.outcome == "failure")
+            .label("failures"),
+            func.array_agg(distinct(Event.username))
+            .filter(Event.username.is_not(None))
+            .label("usernames"),
+            first_seen.label("first_seen"),
+            last_seen.label("last_seen"),
+        )
+        # The total counts addresses, not events: this is a paginated list of
+        # groups, so counting rows here would inflate the page count.
+        total = int(
+            await self._session.scalar(
+                select(func.count(distinct(func.host(Event.source_ip)))).where(*conditions)
+            )
+            or 0
+        )
+        rows = (
+            await self._session.execute(
+                select(*columns)
+                .where(*conditions)
+                .group_by(source_ip)
+                .order_by(func.count().desc(), last_seen.desc())
+                .limit(clamp_limit(limit))
+                .offset(clamp_offset(offset))
+            )
+        ).all()
+        return {
+            "total": total,
+            "limit": clamp_limit(limit),
+            "offset": clamp_offset(offset),
+            "items": [self._source_row(row) for row in rows],
+        }
+
+    @staticmethod
+    def _session_row(row: Any) -> dict[str, Any]:
+        return {
+            "session_id": row.session_id,
+            "source_ip": row.source_ip,
+            "first_seen": row.first_seen.isoformat() if row.first_seen else None,
+            "last_seen": row.last_seen.isoformat() if row.last_seen else None,
+            "duration_ms": int(row.duration_ms) if row.duration_ms is not None else None,
+            "event_count": int(row.event_count or 0),
+            "usernames": _as_str_list(row.usernames),
+            "protocols": _as_str_list(row.protocols),
+            "has_authentication": bool(row.has_authentication),
+            "has_success": bool(row.has_success),
+        }
+
+    @staticmethod
+    def _command_row(row: Any) -> dict[str, Any]:
+        return {
+            "event_id": row.event_id,
+            "event_type": row.event_type,
+            "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
+            "source_ip": row.source_ip,
+            "session_id": row.session_id,
+            "username": row.username,
+            "outcome": row.outcome,
+            "command": row.command,
+            "command_line": row.command_line or row.command,
+        }
+
+    @staticmethod
+    def _source_row(row: Any) -> dict[str, Any]:
+        return {
+            "source_ip": row.source_ip,
+            "event_count": int(row.event_count or 0),
+            "session_count": int(row.session_count or 0),
+            "auth_attempts": int(row.auth_attempts or 0),
+            "commands": int(row.commands or 0),
+            "transfers": int(row.transfers or 0),
+            "failures": int(row.failures or 0),
+            "usernames": _as_str_list(row.usernames),
+            "first_seen": row.first_seen.isoformat() if row.first_seen else None,
+            "last_seen": row.last_seen.isoformat() if row.last_seen else None,
+        }
 
     async def get_cursor(self, path: str) -> int:
         offset = await self._session.scalar(
