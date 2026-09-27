@@ -4,9 +4,11 @@ The mapping below follows the official Cowrie output event reference
 (https://docs.cowrie.org/en/latest/OUTPUT.html). Attributes that Cowrie
 documents as shared across events (``eventid``, ``timestamp``, ``sensor``,
 ``session``, ``src_ip``, ``src_port``, ``dst_ip``, ``dst_port``,
-``protocol``, ``message``) are lifted into the corresponding
+``protocol``) are lifted into the corresponding
 :class:`~honeypot_backend.normalization.events.NormalizedEvent` fields;
-everything else lands in ``details`` under a normalized name.
+everything else lands in ``details`` under a normalized name. ``message`` is
+shared but has no such field, so it is preserved in ``details`` wherever it
+carries something the other attributes do not.
 
 Event types that are not listed here are still accepted: they fall back to a
 generic extraction so that new Cowrie events are ingested instead of dropped.
@@ -257,9 +259,18 @@ def _extract_client_var(event: Mapping[str, Any]) -> Extraction:
 
 
 def _extract_generic(event: Mapping[str, Any]) -> Extraction:
-    """Keep every non shared attribute for event types without a dedicated map."""
+    """Keep every non shared attribute for event types without a dedicated map.
+
+    ``message`` is a shared attribute, so it is not swept up with the rest, but
+    it still carries context that no other field does. Cowrie puts the honeypot
+    side destination path of a download there, for example, and dropping it
+    would leave that detail unrecoverable.
+    """
 
     details = {key: value for key, value in event.items() if key not in SHARED_ATTRIBUTES}
+    message = clean_text(event.get("message"), limit=1024)
+    if message is not None:
+        details["message"] = message
     return Extraction(username=clean_text(event.get("username")), details=details)
 
 

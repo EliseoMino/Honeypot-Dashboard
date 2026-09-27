@@ -351,6 +351,29 @@ def test_the_reported_statistics_add_up(
     assert stats["batches_sent"] == 1
     assert stats["malformed_lines"] == 0
     assert stats["delivery_failures"] == 0
+    assert stats["rotations"] == 0
+    assert stats["truncations"] == 0
+
+
+def test_lost_events_from_a_truncation_reach_the_reported_statistics(
+    settings: AgentSettings, client: FakeClient, append: Callable[..., int], event: Callable[..., str]
+) -> None:
+    """A truncation has to be visible in the stats, not only in the log.
+
+    It is the only signal that events existed but were destroyed before the
+    agent could ship them, so it cannot stay buried in a log line.
+    """
+
+    append(event())
+    pipeline = build(settings, client)
+    pipeline.run_once()
+
+    settings.cowrie_log_path.write_bytes(b"")
+    pipeline.run_once()
+
+    stats = pipeline.stats.snapshot()
+    assert stats["truncations"] == 1
+    assert stats["rotations"] == 0
 
 
 def test_requesting_a_stop_finishes_the_current_batch(

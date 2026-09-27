@@ -42,6 +42,12 @@ class Tailer(Protocol):
     @property
     def path(self) -> Any: ...
 
+    @property
+    def rotations(self) -> int: ...
+
+    @property
+    def truncations(self) -> int: ...
+
 
 class Stats:
     """Counters logged periodically and on shutdown."""
@@ -53,6 +59,8 @@ class Stats:
         self.malformed_lines = 0
         self.delivery_failures = 0
         self.rejected_batches = 0
+        self.rotations = 0
+        self.truncations = 0
 
     def snapshot(self) -> dict[str, int]:
         return dict(self.__dict__)
@@ -130,6 +138,10 @@ class IngestPipeline:
             return 0
 
         records = self._tailer.poll()
+        # Mirrored every cycle so a truncation that happened while nothing was
+        # being read still shows up in the periodic stats and on shutdown.
+        self.stats.rotations = self._tailer.rotations
+        self.stats.truncations = self._tailer.truncations
         if records:
             if self._first_pending_at is None:
                 self._first_pending_at = self._monotonic()

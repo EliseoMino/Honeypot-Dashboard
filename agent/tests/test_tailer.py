@@ -11,6 +11,7 @@ the same ``_reopen`` path on every platform.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -232,14 +233,103 @@ def test_a_truncation_seen_on_a_poll_is_reopened(
     assert [r.text for r in records] == ["after-truncate"]
 
 
+def test_a_truncation_is_counted(cowrie_log: Path, append: Callable[..., int]) -> None:
+    """Truncation is counted, because it means events were lost."""
+
+    append("one")
+    tailer = CowrieLogTailer(cowrie_log, start_at_end=False)
+    tailer.poll()
+    assert tailer.truncations == 0
+
+    cowrie_log.write_bytes(b"")
+    assert tailer.poll() == []  # the empty file is the detectable moment
+    append("after")
+
+    assert tailer.truncations == 1
+    assert tailer.rotations == 0
+
+
+def test_a_truncation_is_logged_as_lost_data(
+    cowrie_log: Path, append: Callable[..., int], caplog: pytest.LogCaptureFixture
+) -> None:
+    """The operator has to be told the evidence is gone, not that it rotated."""
+
+    append("one")
+    tailer = CowrieLogTailer(cowrie_log, start_at_end=False)
+    tailer.poll()
+    lost_from = tailer.offset
+
+    cowrie_log.write_bytes(b"")
+    with caplog.at_level(logging.ERROR, logger="honeypot_agent.tailer"):
+        tailer.poll()
+
+    assert "truncated" in caplog.text
+    assert "lost" in caplog.text
+    assert str(lost_from) in caplog.text
+
+
+def test_repeated_truncations_are_counted_separately(
+    cowrie_log: Path, append: Callable[..., int]
+) -> None:
+    append("one")
+    tailer = CowrieLogTailer(cowrie_log, start_at_end=False)
+    tailer.poll()
+
+    for _ in range(3):
+        cowrie_log.write_bytes(b"")
+        tailer.poll()
+        append("fresh")
+        tailer.poll()
+
+    assert tailer.truncations == 3
+
+
+@requires_replace
+def test_a_rotation_is_counted_as_a_rotation_not_a_truncation(
+    cowrie_log: Path, append: Callable[..., int]
+) -> None:
+    """Rotation loses nothing, so it must not inflate the truncation count."""
+
+    append("before")
+    tailer = CowrieLogTailer(cowrie_log, start_at_end=False)
+    tailer.poll()
+
+    cowrie_log.rename(cowrie_log.with_name("cowrie.json.1"))
+    cowrie_log.write_bytes(b"")
+    append("after")
+
+    tailer.poll()
+
+    assert tailer.rotations == 1
+    assert tailer.truncations == 0
+
+
+@requires_replace
+def test_a_rotation_is_logged_without_claiming_data_was_lost(
+    cowrie_log: Path, append: Callable[..., int], caplog: pytest.LogCaptureFixture
+) -> None:
+    append("before")
+    tailer = CowrieLogTailer(cowrie_log, start_at_end=False)
+    tailer.poll()
+
+    cowrie_log.rename(cowrie_log.with_name("cowrie.json.1"))
+    cowrie_log.write_bytes(b"")
+    append("after")
+
+    with caplog.at_level(logging.WARNING, logger="honeypot_agent.tailer"):
+        tailer.poll()
+
+    assert "rotated" in caplog.text
+    assert "lost" not in caplog.text
+
+
 def test_a_truncation_missed_by_a_poll_is_not_detected(
     cowrie_log: Path, append: Callable[..., int]
 ) -> None:
     """Known limitation: truncation is detected by size, not by content.
 
     If the file is truncated and refilled past the previous offset between two
-    polls, the size check does not fire and the tailer resumes mid-line. This
-    pins the real behaviour so it stays visible: rotate with rename (new inode)
+    polls, the size check does not fire and the tailer resumes mid-line. This    pins the real behaviour so it stays visible: rotate with rename (new inode)
     rather than ``copytruncate``, and note the backend rejects the resulting
     fragment because it carries no ``eventid``.
     """

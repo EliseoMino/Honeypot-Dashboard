@@ -313,21 +313,47 @@ def test_an_unknown_event_type_is_still_stored() -> None:
     assert event.details["reason"] == "from a newer Cowrie"
 
 
-def test_a_shared_attribute_is_never_duplicated_into_details() -> None:
-    """Known limitation: ``message`` is shared, so it is not lifted anywhere.
+def test_an_unmapped_event_keeps_the_message_in_details() -> None:
+    """``message`` survives generic extraction too.
 
-    ``message`` is in ``SHARED_ATTRIBUTES`` and ``NormalizedEvent`` has no
-    field for it, so an event type handled by the generic extractor ends up
-    without its message in ``details``. It is still available in ``raw``. This
-    matters for ``cowrie.telnet.error``, whose payload usually *is* the message.
+    ``message`` is a shared attribute and ``NormalizedEvent`` has no field for
+    it, but dropping it from the generic path left an event with nothing but its
+    message. That matters for ``cowrie.telnet.error``, whose payload usually
+    *is* the message, and for downloads, where the message carries the honeypot
+    side destination path.
     """
 
     raw = build("cowrie.some.brand.new.event", {"message": "only a message"})
 
     event = normalize(raw, received_at=RECEIVED_AT)
 
-    assert "message" not in event.details
+    assert event.details["message"] == "only a message"
     assert event.raw["message"] == "only a message"
+
+
+def test_a_long_message_is_truncated_in_details() -> None:
+    """The preserved message stays bounded like every other cleaned text."""
+
+    event = normalize(
+        build("cowrie.some.brand.new.event", {"message": "x" * 5000}),
+        received_at=RECEIVED_AT,
+    )
+
+    assert len(event.details["message"]) <= 1024
+
+
+def test_a_shared_attribute_is_never_duplicated_into_details() -> None:
+    """The lifted attributes have their own fields, so they stay out of details."""
+
+    event = normalize(
+        build("cowrie.some.brand.new.event", {"src_ip": "203.0.113.9", "src_port": 4242}),
+        received_at=RECEIVED_AT,
+    )
+
+    assert event.source_ip == "203.0.113.9"
+    assert event.source_port == 4242
+    assert "src_ip" not in event.details
+    assert "src_port" not in event.details
 
 
 def test_a_mapped_event_keeps_the_message_in_details() -> None:

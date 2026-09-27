@@ -128,6 +128,47 @@ Los tests del backend que necesitan PostgreSQL se saltan salvo que
 RF-03/RF-11/RF-12 antes y después de cada test. Ver el aviso al final de
 `.env.example`.
 
+### Rotación de `cowrie.json`
+
+El agente sobrevive a que el log se renueve o se trunque, pero no puede tratar
+los dos casos igual porque no son igual de graves.
+
+Una rotación reemplaza el archivo, así que cambia el inode y no se pierde nada:
+el agente reabre y sigue. Un truncado conserva el inode y vacía el archivo, que es
+lo que hace `copytruncate`. En ese caso, **todo lo que se escribió entre la
+última lectura y el truncado ya no está en disco y no hay offset que lo
+recupere**. El agente reinicia desde el principio del contenido nuevo y lo
+registra como lo que es: pérdida de evidencia.
+
+Por eso el agente cuenta los dos casos por separado y los publica en sus
+estadísticas (`rotations` y `truncations`) además de loguearlos. Un
+`truncations` distinto de cero significa que faltan eventos, y conviene leer las
+estadísticas del agente (`docker compose logs agent`) antes de sacar conclusiones
+de un período con huecos.
+
+Para no perder nada hay que rotar por *rename*, no con `copytruncate`: la
+configuración recomendada en `logrotate.conf` es la que mueve el archivo y le
+avisa a Cowrie, por ejemplo con `postrotate` haciendo que Cowrie cierre y
+reabra su salida. Con el cowsignal de Cowrie, algo del orden de:
+
+```
+/cowrie/cowrie-git/var/log/cowrie/cowrie.json {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        /cowrie/bin/cowrie.py -n 2>/dev/null || kill -HUP $(cat /cowrie/cowrie-git/var/run/cowrie.pid)
+    endscript
+}
+```
+
+Está fuera del alcance de la fase actual porque el despliegue en VPS no está
+implementado, pero conviene adoptarlo antes de exponer el honeypot.
+
 ## Problemas frecuentes
 
 **`Failed to load output engine: jsonlog` con
