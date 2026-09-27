@@ -1,14 +1,18 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-const BACKEND = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+// The dashboard calls the API with relative paths, so the dev server forwards
+// them instead of the browser talking to the backend directly. The default
+// target is nginx, not the backend: the backend requires a client certificate
+// (RF-01) and a browser has nowhere to put a private key, so nginx is the only
+// process that can reach it. Point this at the backend only when running it with
+// certificates a client can present.
+const BACKEND = process.env.BACKEND_URL ?? "http://127.0.0.1:3000";
 
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // The dashboard calls the API with relative paths, so the dev server
-    // forwards them to the backend and the browser never needs CORS.
     proxy: {
       "/api": { target: BACKEND, changeOrigin: true },
       "/healthz": { target: BACKEND, changeOrigin: true },

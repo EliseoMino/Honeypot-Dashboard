@@ -1,0 +1,14 @@
+# Image for the one-shot development PKI generation.
+#
+# Cryptography is installed at build time so that `docker compose up` needs no
+# network access and no version range that could drift between runs. The
+# generator itself is stdlib plus `cryptography`.
+
+FROM python:3.13-slim
+
+RUN pip install --no-cache-dir "cryptography==50.0.1"
+
+COPY scripts/generate-dev-certs.py /opt/generate-dev-certs.py
+
+ENTRYPOINT ["python", "/opt/generate-dev-certs.py"]
+CMD ["--out", "/certs"]

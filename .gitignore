@@ -22,15 +22,16 @@ npm-debug.log*
 # Logs and honeypot data
 *.log
 logs/
-infrastructure/cowrie/data/
-infrastructure/cowrie/etc/
+# The contents of infrastructure/cowrie/data are ignored by the .gitignore files
+# inside that directory, so that its skeleton stays in version control.
 
 # Local runtime state: TLS material and ingestion spool
 var/
 
-# Local databases and volumes
+# Local databases and volumes. Anchored to the repository root so it does not
+# also swallow infrastructure/cowrie/data.
 pgdata/
-data/
+/data/
 
 # IDE / OS
 .idea/

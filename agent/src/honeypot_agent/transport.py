@@ -136,7 +136,8 @@ def _build_ssl_context(settings: AgentSettings) -> ssl.SSLContext:
         if not path.is_file():
             raise SystemExit(
                 f"{variable} does not exist: {path}. "
-                "Generate the development PKI with 'python scripts/generate-dev-certs.py --out var/certs'."
+                "Generate the development PKI with 'python scripts/generate-dev-certs.py "
+                "--out var/certs', or let the compose file do it with 'docker compose up'."
             )
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)

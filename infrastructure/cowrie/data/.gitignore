@@ -1,0 +1,23 @@
+# Honeypot runtime data, never committed.
+#
+# The directory skeleton below is tracked on purpose. compose.yaml bind mounts
+# this directory over the Cowrie image's own /cowrie/cowrie-git/var, which
+# replaces the tree the image ships with, and Cowrie does not create the log
+# directory it writes to. Without the skeleton in version control a fresh clone
+# would fail to start with "No such file or directory: var/log/cowrie/cowrie.json".
+#
+# This directory corresponds to the *inside* of that mount point, so `log/`
+# here is `var/log/` in the container and `lib/` is `var/lib/`.
+#
+# Each directory carries its own .gitignore, the same convention the Cowrie image
+# uses, so the layout is preserved while the generated files stay out of git.
+# The negations below hand the tree over to those nested files, which then ignore
+# whatever each directory actually generates.
+*
+!.gitignore
+!log
+!log/**
+!lib
+!lib/**
+!run
+!run/**

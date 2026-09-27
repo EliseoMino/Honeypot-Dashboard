@@ -42,7 +42,8 @@ def _require_file(path: Path, variable: str) -> None:
     if not path.is_file():
         raise SystemExit(
             f"{variable} does not exist: {path}. "
-            "Generate the development PKI with 'python scripts/generate-dev-certs.py --out var/certs'."
+            "Generate the development PKI with 'python scripts/generate-dev-certs.py "
+            "--out var/certs', or let the compose file do it with 'docker compose up'."
         )
 
 
