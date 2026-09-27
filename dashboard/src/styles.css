@@ -444,6 +444,48 @@ a:focus-visible {
   border-color: var(--failure);
 }
 
+/* Alert severities, worst first. They reuse the outcome colours so the palette
+   does not grow, with the mid tones coming from the amber already in use. */
+.badge--critical {
+  color: var(--failure);
+  border-color: var(--failure);
+  background: rgba(248, 81, 73, 0.14);
+  font-weight: 600;
+}
+
+.badge--high {
+  color: #ffa657;
+  border-color: #ffa657;
+}
+
+.badge--medium {
+  color: var(--pending);
+  border-color: var(--pending);
+}
+
+.badge--low {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+/* Evidence list of an alert */
+
+.evidence-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.evidence-list a {
+  font-size: 13px;
+  word-break: break-all;
+}
+
 /* Pagination */
 
 .pagination {

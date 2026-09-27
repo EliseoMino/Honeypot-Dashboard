@@ -5,7 +5,14 @@
  * change cannot leave a stale response on screen.
  */
 
-import type { EventPage, EventSummary, NormalizedEvent, Order } from "./types";
+import type {
+  Alert,
+  AlertPage,
+  EventPage,
+  EventSummary,
+  NormalizedEvent,
+  Order,
+} from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -21,6 +28,16 @@ export interface EventQuery {
   limit: number;
   offset: number;
   order: Order;
+}
+
+export interface AlertQuery {
+  ruleId?: string;
+  alertType?: string;
+  severity?: string;
+  sourceIp?: string;
+  sessionId?: string;
+  limit: number;
+  offset: number;
 }
 
 export class ApiError extends Error {
@@ -98,4 +115,23 @@ export function fetchEventPage(query: EventQuery, signal?: AbortSignal): Promise
 
 export function fetchEvent(eventId: string, signal?: AbortSignal): Promise<NormalizedEvent> {
   return request<NormalizedEvent>(`/api/v1/events/${encodeURIComponent(eventId)}`, signal);
+}
+
+export function fetchAlertPage(query: AlertQuery, signal?: AbortSignal): Promise<AlertPage> {
+  return request<AlertPage>(
+    `/api/v1/alerts${queryString({
+      rule_id: query.ruleId,
+      alert_type: query.alertType,
+      severity: query.severity,
+      source_ip: query.sourceIp,
+      session_id: query.sessionId,
+      limit: query.limit,
+      offset: query.offset,
+    })}`,
+    signal,
+  );
+}
+
+export function fetchAlert(alertId: number, signal?: AbortSignal): Promise<Alert> {
+  return request<Alert>(`/api/v1/alerts/${alertId}`, signal);
 }

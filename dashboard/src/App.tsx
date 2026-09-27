@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { EmptyState } from "./components/Feedback";
+import { AlertDetailPage } from "./pages/AlertDetailPage";
+import { AlertsPage } from "./pages/AlertsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventsPage } from "./pages/EventsPage";
 import { SummaryPage } from "./pages/SummaryPage";
@@ -15,6 +17,9 @@ export function App(): ReactNode {
           <NavLink className="app__link" to="/" end>
             Resumen
           </NavLink>
+          <NavLink className="app__link" to="/alerts">
+            Alertas
+          </NavLink>
           <NavLink className="app__link" to="/events">
             Eventos
           </NavLink>
@@ -24,6 +29,8 @@ export function App(): ReactNode {
       <main className="app__main">
         <Routes>
           <Route path="/" element={<SummaryPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/alerts/:alertId" element={<AlertDetailPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/:eventId" element={<EventDetailPage />} />
           <Route
