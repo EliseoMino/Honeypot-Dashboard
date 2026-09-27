@@ -43,7 +43,7 @@ class IngestClient:
     def __init__(self, settings: AgentSettings) -> None:
         self._settings = settings
         self._client = httpx.Client(
-            verify=self._build_ssl_context(settings),
+            verify=_build_ssl_context(settings),
             timeout=settings.request_timeout,
             limits=httpx.Limits(max_keepalive_connections=1, max_connections=2),
             headers={"user-agent": "honeypot-agent"},
