@@ -16,6 +16,14 @@
 #
 # `cert-init` generates the development PKI on the way up, so there is no manual
 # step. Open http://127.0.0.1:3000 once the stack reports healthy.
+#
+# While iterating on the application, run it in watch mode instead:
+#
+#   docker compose up --watch
+#
+# The backend and the agent pick up edits to their sources without a rebuild, and
+# the dashboard is rebuilt when its sources change. See the `develop` block of
+# each service.
 
 name: honeypot-dashboard
 
@@ -112,6 +120,10 @@ services:
       SPOOL_DIR: /var/lib/honeypot/spool
       DETECTION_RULES_PATH: /app/rules/rules.toml
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Watch mode runs the sources that are synced into /app/src, which is where
+      # the Dockerfile copies them, and that path wins over the copy `pip install .`
+      # leaves in site-packages. Without it a synced file would be ignored.
+      PYTHONPATH: /app/src
     volumes:
       - certs:/certs:ro
       - spool:/var/lib/honeypot/spool
@@ -122,6 +134,25 @@ services:
     # authenticates with a certificate.
     expose:
       - "8443"
+    # `python -m` rather than the installed console script, so the process
+    # imports the synced sources from /app/src (see PYTHONPATH above).
+    command: ["python", "-m", "honeypot_backend"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./backend/src
+          target: /app/src
+          ignore:
+            - "**/__pycache__/**"
+            - "**/*.pyc"
+        # The dependencies are resolved when the image is built, so a change to
+        # the declared dependencies needs a rebuild and not a sync.
+        - action: rebuild
+          path: ./backend/pyproject.toml
+        # rules.toml is a read only bind mount that the API reads at startup, so
+        # a restart is all it takes to pick up an edited rule.
+        - action: restart
+          path: ./infrastructure/detection
     networks:
       data:
         aliases:
@@ -161,12 +192,31 @@ services:
       # deployed honeypot this should be true.
       AGENT_START_AT_END: "false"
       AGENT_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Watch mode runs the sources that are synced into /app/src, which is where
+      # the Dockerfile copies them, and that path wins over the copy `pip install .`
+      # leaves in site-packages. Without it a synced file would be ignored.
+      PYTHONPATH: /app/src
     volumes:
       - certs:/certs:ro
       # Read only: the agent must never be able to alter the honeypot log it is
       # supposed to observe.
       - ./infrastructure/cowrie/data:/cowrie/var:ro
       - agentstate:/var/lib/honeypot-agent
+    # `python -m` rather than the installed console script, so the process
+    # imports the synced sources from /app/src (see PYTHONPATH above).
+    command: ["python", "-m", "honeypot_agent"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./agent/src
+          target: /app/src
+          ignore:
+            - "**/__pycache__/**"
+            - "**/*.pyc"
+        # The dependencies are resolved when the image is built, so a change to
+        # the declared dependencies needs a rebuild and not a sync.
+        - action: rebuild
+          path: ./agent/pyproject.toml
     networks:
       data:
         aliases:
@@ -186,6 +236,35 @@ services:
       - "127.0.0.1:${DASHBOARD_PORT:-3000}:8080"
     volumes:
       - certs:/certs:ro
+    develop:
+      watch:
+        # The dashboard is a compiled bundle served by nginx, so a source change
+        # means a new build: there is no running process that could pick up a
+        # synced file.
+        - action: rebuild
+          path: ./dashboard/src
+        - action: rebuild
+          path: ./dashboard/index.html
+        - action: rebuild
+          path: ./dashboard/vite.config.ts
+        - action: rebuild
+          path: ./dashboard/tsconfig.json
+        # A dependency change has to reinstall the tree from the lockfile.
+        - action: rebuild
+          path: ./dashboard/package.json
+        - action: rebuild
+          path: ./dashboard/package-lock.json
+        # The nginx configuration is not compiled, so it can simply be replaced
+        # in place and nginx reloaded with a restart of the container. The
+        # targets are the ones the dashboard Dockerfile copies them to, file by
+        # file: syncing the directory would drop the repository server block on
+        # top of the main nginx.conf that the image ships.
+        - action: sync+restart
+          path: ./infrastructure/nginx/nginx.conf
+          target: /etc/nginx/conf.d/default.conf
+        - action: sync+restart
+          path: ./infrastructure/nginx/honeypot-proxy.conf
+          target: /etc/nginx/honeypot-proxy.conf
     networks:
       edge:
         aliases:

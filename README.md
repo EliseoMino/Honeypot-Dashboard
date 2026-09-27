@@ -32,6 +32,33 @@ docker compose ps
 docker compose logs -f agent
 ```
 
+### Desarrollo con watch
+
+```bash
+docker compose up --watch
+```
+
+Sin salir de ese comando, los cambios se aplican solos:
+
+| Cambio | Efecto |
+| --- | --- |
+| `backend/src/**` | Se sincroniza al contenedor y el backend se reinicia. |
+| `agent/src/**` | Se sincroniza al contenedor y el agente se reinicia. |
+| `infrastructure/detection/**` | Reinicia el backend, que lee las reglas al arrancar. |
+| `backend/pyproject.toml`, `agent/pyproject.toml` | Reconstruye la imagen: las dependencias se resuelven al construir. |
+| `dashboard/src/**` y su configuración | Reconstruye la imagen del dashboard y nginx sirve el bundle nuevo. |
+| `infrastructure/nginx/**` | Se sincroniza la configuración y nginx se reinicia. |
+
+El backend y el agente se ejecutan con `PYTHONPATH=/app/src` en modo watch, así
+que el proceso importa el código sincronizado y no la copia que `pip install .`
+deja en `site-packages`. Fuera del modo watch se usa el comando normal de la
+imagen.
+
+El dashboard es un bundle estático servido por nginx, por eso un cambio de
+código implica reconstruir la imagen y no un simple `sync`. Para iterar sobre
+el front con HMR hay que levantar `npm run dev` por fuera y apuntar el proxy de
+Vite al dashboard.
+
 ## Puertos
 
 Todo se publica solo en `127.0.0.1`. El backend **no** se publica: la única

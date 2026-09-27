@@ -62,6 +62,29 @@ describe("RF-07 detalle de un evento", () => {
     expect(screen.getByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
   });
 
+  it("relaciona el log original con el evento normalizado en la misma vista", async () => {
+    // RF-14 asks for the original log to be relatable to the normalized event.
+    // Both live in one record, and the key that ties them is the Cowrie
+    // eventid, shown next to the raw payload.
+    mockBackend(() => ({ body: makeEvent() }));
+
+    renderDetail("e-1");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Mostrar" }));
+
+    // The normalized side: the fields Cowrie does not know about.
+    expect(screen.getByText("e-1")).toBeDefined();
+    expect(screen.getByText("honeypot-1")).toBeDefined();
+    expect(screen.getByText("51234")).toBeDefined();
+
+    // The key both sides share.
+    expect(screen.getByText("cowrie.login.failed")).toBeDefined();
+
+    // The original side: the payload exactly as Cowrie emitted it.
+    expect(screen.getByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
+    expect(screen.getByText(/"username": "root"/)).toBeDefined();
+  });
+
   it("informa cuando el evento no existe", async () => {
     mockBackend(() => ({ status: 404, body: { detail: "event 'nope' not found" } }));
 
