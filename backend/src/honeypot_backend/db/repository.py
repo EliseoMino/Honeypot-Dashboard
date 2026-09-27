@@ -30,7 +30,6 @@ _SEVERITY_RANK = case(
     value=Alert.severity,
     else_=0,
 )
-
 _EVENT_COLUMNS = (
     "event_id",
     "source",
@@ -531,7 +530,7 @@ class AlertRepository:
             select(Alert)
             .where(*filters.conditions())
             .order_by(
-                _SEVERITY_RANK[Alert.severity].desc(),
+                _SEVERITY_RANK.desc(),
                 Alert.generated_at.desc(),
                 Alert.id.desc(),
             )

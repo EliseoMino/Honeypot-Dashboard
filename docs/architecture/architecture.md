@@ -225,4 +225,19 @@ python -m pytest                      # no database required
 TEST_DATABASE_URL=postgresql+asyncpg://honeypot:change-me@127.0.0.1:5432/honeypot_test python -m pytest
 ```
 
+To get such a database, `compose.yaml` already has the service, so it is one
+variable away and no container to invent:
+
+```bash
+POSTGRES_USER=honeypot POSTGRES_PASSWORD=honeypot POSTGRES_DB=honeypot \
+  docker compose up -d postgres
+docker exec honeypot-dashboard-postgres-1 \
+  psql -U honeypot -d honeypot -c 'CREATE DATABASE honeypot_test;'
+```
+
+Those tests are the ones that cover the migrations, the JSONB and `INET`
+columns and the severity ordering of the alerts, so the RF-11, RF-12 and RF-03
+schemas are worth running against a real PostgreSQL before calling any of them
+done.
+
 The dashboard tests in `/dashboard/src/test` need no services at all.

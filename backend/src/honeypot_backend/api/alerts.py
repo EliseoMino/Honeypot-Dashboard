@@ -116,7 +116,7 @@ def _severity(value: str | None) -> str | None:
         return None
     if value not in SEVERITY_LEVELS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"'{value}' is not a severity level, expected one of "
             f"{', '.join(SEVERITY_LEVELS)}",
         )
@@ -142,6 +142,6 @@ def _source_ip(value: str | None) -> str | None:
         return str(ipaddress.ip_address(value))
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"'{value}' is not a valid IP address",
         ) from None

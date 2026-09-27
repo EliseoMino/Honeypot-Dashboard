@@ -96,6 +96,7 @@ severity = "medium"
 id = "file_download"
 kind = "file_transfer"
 title = "File download"
+description = "A file the honeypot was asked to download or to send."
 severity = "low"
 """
 

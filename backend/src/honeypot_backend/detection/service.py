@@ -45,6 +45,16 @@ class DetectionService:
         """Load the configured rules, keeping the error instead of raising."""
 
         path = resolve_rules_path(settings.detection_rules_path)
+        if path is None:
+            # Detection without rules is a configuration mistake, not a state
+            # that detects nothing: the endpoints have to say so instead of
+            # answering as if every event had been evaluated against no rule.
+            error = (
+                "no detection rules are configured, set DETECTION_RULES_PATH "
+                "to the rule file to use"
+            )
+            logger.error("detection is disabled: %s", error)
+            return cls(engine=DetectionEngine(), rules=RulesFile(), path=None, error=error)
         try:
             rules = load_rules(path)
         except RuleConfigError as exc:
