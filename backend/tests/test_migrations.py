@@ -1,4 +1,4 @@
-"""Schema migrations of the stored events (RF-03)."""
+"""Schema migrations of the stored events and detections (RF-03, RF-11)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from honeypot_backend.db.session import MIGRATIONS_DIR, apply_migrations, split_
 
 EVENTS_MIGRATION = "0001_events.sql"
 EVENTS_VERSION = EVENTS_MIGRATION.removesuffix(".sql")
+DETECTIONS_MIGRATION = "0002_detections.sql"
 
 #: Indexes RF-03 requires on the stored events.
 REQUIRED_INDEXES = {
@@ -18,6 +19,14 @@ REQUIRED_INDEXES = {
     "ix_events_source_ip": "(source_ip)",
     "ix_events_event_type": "(event_type)",
     "ix_events_session_id": "(session_id)",
+}
+
+#: Indexes RF-11 requires to look findings up by rule, subject and time.
+REQUIRED_DETECTION_INDEXES = {
+    "ix_detections_rule_id": "(rule_id)",
+    "ix_detections_source_ip": "(source_ip)",
+    "ix_detections_occurred_from": "(occurred_from)",
+    "ix_detections_detected_at": "(detected_at",
 }
 
 
@@ -77,8 +86,26 @@ def test_events_migration_deduplicates_by_event_id() -> None:
     assert "constraint uq_events_event_id unique (event_id)" in _flat(EVENTS_MIGRATION)
 
 
-def test_orm_indexes_match_the_migration() -> None:
-    created = set(re.findall(r"create index if not exists (\w+)", _flat(EVENTS_MIGRATION)))
+def test_detections_migration_declares_the_indexes_required_by_rf11() -> None:
+    flat = _flat(DETECTIONS_MIGRATION)
+
+    for index, columns in REQUIRED_DETECTION_INDEXES.items():
+        assert f"create index if not exists {index} on detections {columns}" in flat
+
+
+def test_detections_migration_deduplicates_by_fingerprint() -> None:
+    flat = _flat(DETECTIONS_MIGRATION)
+
+    assert "constraint uq_detections_fingerprint unique (fingerprint)" in flat
+    assert "source_ip inet" in flat
+    assert "evidence jsonb not null" in flat
+    assert "check (occurred_to >= occurred_from)" in flat
+
+
+def test_orm_indexes_match_the_migrations() -> None:
+    created: set[str] = set()
+    for script in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        created.update(re.findall(r"create index if not exists (\w+)", _flat(script.name)))
     declared = {index.name for table in Base.metadata.tables.values() for index in table.indexes}
 
     assert declared == created

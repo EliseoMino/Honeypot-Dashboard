@@ -12,6 +12,9 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/events"),
     ("GET", "/api/v1/events/summary"),
     ("GET", "/api/v1/events/{event_id}"),
+    ("POST", "/api/v1/detections/run"),
+    ("GET", "/api/v1/detections"),
+    ("GET", "/api/v1/detections/rules"),
 }
 
 

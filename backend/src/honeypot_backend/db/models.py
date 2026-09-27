@@ -11,7 +11,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -89,3 +99,54 @@ class SpoolCursor(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class Detection(Base):
+    """One detection rule matching stored events (RF-11).
+
+    A detection is idempotent: ``fingerprint`` is derived from the rule and the
+    subject it fired on, so evaluating the same rule over the same events again
+    does not create a second row.
+    """
+
+    __tablename__ = "detections"
+    __table_args__ = (
+        UniqueConstraint("fingerprint", name="uq_detections_fingerprint"),
+        CheckConstraint("occurred_to >= occurred_from", name="ck_detections_window"),
+        Index("ix_detections_rule_id", "rule_id"),
+        Index("ix_detections_source_ip", "source_ip"),
+        Index("ix_detections_occurred_from", "occurred_from"),
+        Index("ix_detections_detected_at", "detected_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    rule_id: Mapped[str] = mapped_column(Text, nullable=False)
+    rule_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    source_ip: Mapped[Any | None] = mapped_column(INET)
+    session_id: Mapped[str | None] = mapped_column(String(128))
+    occurred_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurred_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON serializable representation."""
+
+        return {
+            "rule_id": self.rule_id,
+            "rule_kind": self.rule_kind,
+            "title": self.title,
+            "source_ip": str(self.source_ip) if self.source_ip is not None else None,
+            "session_id": self.session_id,
+            "occurred_from": self.occurred_from.isoformat() if self.occurred_from else None,
+            "occurred_to": self.occurred_to.isoformat() if self.occurred_to else None,
+            "event_count": self.event_count,
+            "evidence": self.evidence or {},
+            "fingerprint": self.fingerprint,
+            "detected_at": self.detected_at.isoformat() if self.detected_at else None,
+        }

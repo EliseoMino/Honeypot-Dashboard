@@ -3,7 +3,7 @@
 Tests that talk to PostgreSQL are skipped unless ``TEST_DATABASE_URL`` points
 at a reachable database, so the suite is still useful without the local Docker
 stack running. That database is treated as disposable: the fixtures drop the
-RF-03 schema before and after every test that uses it.
+RF-03 and RF-11 schema before and after every test that uses it.
 """
 
 from __future__ import annotations

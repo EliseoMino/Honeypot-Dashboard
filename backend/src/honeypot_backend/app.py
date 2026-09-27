@@ -10,9 +10,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from honeypot_backend import __version__
-from honeypot_backend.api import events, health, ingest
+from honeypot_backend.api import detections, events, health, ingest
 from honeypot_backend.config import Settings, get_settings
 from honeypot_backend.db.session import apply_migrations, dispose_engines, get_engine
+from honeypot_backend.detection import DetectionService
 from honeypot_backend.ingest.dedupe import RecentEventIds
 from honeypot_backend.ingest.metrics import IngestMetrics
 from honeypot_backend.ingest.replayer import NormalizedSpoolReplayer
@@ -38,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     replayer = NormalizedSpoolReplayer(resolved, spool.normalized_dir)
     metrics = IngestMetrics()
+    detection = DetectionService.from_settings(resolved)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -82,8 +84,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.metrics = metrics
     app.state.dedupe = RecentEventIds(capacity=resolved.dedupe_window)
     app.state.replayer = replayer
+    app.state.detection = detection
 
     app.include_router(health.router)
     app.include_router(ingest.router)
     app.include_router(events.router)
+    app.include_router(detections.router)
     return app

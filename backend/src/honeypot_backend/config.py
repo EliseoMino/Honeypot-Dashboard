@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     spool_replay_batch_size: int = 500
     spool_replay_error_backoff: float = 5.0
 
+    # RF-11: the rule configuration of the detection engine. A relative path is
+    # resolved against the working directory and then against the repository, so
+    # the backend can be started from either. Set it to an empty value to run
+    # without detection rules.
+    detection_rules_path: Path | None = Path("infrastructure/detection/rules.toml")
+    detection_default_lookback: int = 24 * 3600
+
     @property
     def tls_version(self) -> ssl.TLSVersion:
         try:

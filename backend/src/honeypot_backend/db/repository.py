@@ -1,8 +1,9 @@
-"""Queries over the stored events (RF-03).
+"""Queries over the stored events and detections (RF-03, RF-11).
 
-The repository is the only place that talks to the ``events`` table. Inserts
-are idempotent thanks to the unique ``event_id``, so replaying a batch after a
-crash never duplicates an event.
+This module is the only place that talks to the ``events`` and ``detections``
+tables. Inserts are idempotent: events ignore a duplicate ``event_id`` and
+detections ignore a duplicate ``fingerprint``, so replaying a batch or
+re-evaluating a rule never records the same thing twice.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from sqlalchemy import Select, String, cast, distinct, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from honeypot_backend.db.models import Event, SpoolCursor
+from honeypot_backend.db.models import Detection, Event, SpoolCursor
 from honeypot_backend.normalization.events import NormalizedEvent
 
 MAX_LIMIT = 500
@@ -306,3 +307,131 @@ class EventRepository:
         )
         await self._session.execute(statement)
         await self._session.flush()
+
+
+@dataclass(frozen=True, slots=True)
+class DetectionFilters:
+    """Filters accepted by the detection query endpoint."""
+
+    rule_id: str | None = None
+    source_ip: str | None = None
+    session_id: str | None = None
+    occurred_from: datetime | None = None
+    occurred_to: datetime | None = None
+
+    def conditions(self) -> list[Any]:
+        clauses: list[Any] = []
+        address = _as_ip(self.source_ip)
+        if address is not None:
+            clauses.append(Detection.source_ip == address)
+        if self.rule_id:
+            clauses.append(Detection.rule_id == self.rule_id)
+        if self.session_id:
+            clauses.append(Detection.session_id == self.session_id)
+        if self.occurred_from:
+            clauses.append(Detection.occurred_from >= self.occurred_from)
+        if self.occurred_to:
+            clauses.append(Detection.occurred_to <= self.occurred_to)
+        return clauses
+
+
+@dataclass(frozen=True, slots=True)
+class DetectionPage:
+    """A page of stored detections."""
+
+    items: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+class DetectionRepository:
+    """Read and write access to the stored detections (RF-11).
+
+    Inserts ignore a finding whose fingerprint is already stored, so evaluating
+    the same rule over the same events twice records it once.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    @staticmethod
+    def insert_statement(records: Sequence[Mapping[str, Any]]) -> Any:
+        """Build the idempotent insert for a batch of findings."""
+
+        return (
+            pg_insert(Detection.__table__)
+            .values([dict(record) for record in records])
+            .on_conflict_do_nothing(index_elements=["fingerprint"])
+            .returning(Detection.id)
+        )
+
+    @staticmethod
+    def count_statement(filters: DetectionFilters) -> Select[Any]:
+        """Build the statement that counts the detections matching ``filters``."""
+
+        return select(func.count()).select_from(Detection).where(*filters.conditions())
+
+    @staticmethod
+    def page_statement(
+        filters: DetectionFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> Select[Any]:
+        """Build the statement that returns one page of detections."""
+
+        return (
+            select(Detection)
+            .where(*filters.conditions())
+            .order_by(Detection.occurred_from.desc(), Detection.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+
+    async def insert_detections(self, detections: Sequence[Any]) -> list[dict[str, Any]]:
+        """Store findings and return the ones that were not stored before.
+
+        The stored rows are read back, so the caller reports the database state
+        (including ``detected_at``) instead of what it tried to write.
+        """
+
+        if not detections:
+            return []
+        records = [detection.to_record() for detection in detections]
+        result = await self._session.execute(self.insert_statement(records))
+        stored_ids = list(result.scalars().all())
+        await self._session.flush()
+        if not stored_ids:
+            return []
+
+        rows = (
+            await self._session.execute(
+                select(Detection).where(Detection.id.in_(stored_ids)).order_by(Detection.id)
+            )
+        ).scalars().all()
+        return [row.to_dict() for row in rows]
+
+    async def list_detections(
+        self,
+        filters: DetectionFilters,
+        *,
+        limit: int = DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> DetectionPage:
+        """Return a page of stored detections, most recent first."""
+
+        total = await self._session.scalar(self.count_statement(filters))
+        rows = (
+            await self._session.execute(
+                self.page_statement(
+                    filters, limit=clamp_limit(limit), offset=clamp_offset(offset)
+                )
+            )
+        ).scalars().all()
+        return DetectionPage(
+            items=[row.to_dict() for row in rows],
+            total=int(total or 0),
+            limit=clamp_limit(limit),
+            offset=clamp_offset(offset),
+        )

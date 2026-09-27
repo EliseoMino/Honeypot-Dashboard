@@ -1,0 +1,105 @@
+# RF-11: detection rules.
+#
+# The rules are evaluated on demand with POST /api/v1/detections/run over a
+# window of stored events, and every finding they produce is recorded in the
+# `detections` table. Alerts (RF-12) are generated from those findings later.
+#
+# The rules are explicit and deterministic: the same events with the same
+# configuration always produce the same findings, and a finding is identified by
+# a fingerprint, so running the detection twice does not duplicate it.
+#
+# Every rule accepts:
+#   id          unique name, stored with the findings ([a-z0-9_]+)
+#   title       short human readable name
+#   description what the rule means, shown by GET /api/v1/detections/rules
+#   kind        which implementation evaluates the rule
+#
+# Change this file and restart the backend to apply a change.
+
+version = 1
+
+# ---------------------------------------------------------------------------
+# 1. Several authentication attempts from the same source IP in a period.
+#
+# The window is anchored on the first attempt of a burst, so attempts are never
+# split across two windows. Raise `threshold` to be less sensitive, or narrow
+# `event_types` to "auth.login_failed" to only count failed attempts.
+# ---------------------------------------------------------------------------
+[[rule]]
+id = "auth_bruteforce"
+kind = "auth_threshold"
+title = "Multiple authentication attempts from one IP"
+description = """
+Several authentication attempts were made from the same source IP inside the
+configured period, which is what a password guessing attempt looks like.
+"""
+threshold = 5
+window_seconds = 300
+event_types = ["auth.login_failed", "auth.login_success"]
+max_evidence_events = 50
+
+# ---------------------------------------------------------------------------
+# 2. Execution of a command of interest.
+#
+# Matching is on the executables a command line invokes, so "sudo wget x",
+# "curl x | sh" and "sh -c 'wget x'" match wget, while "echo wget" does not.
+# Compare against this list and extend it with the tools worth investigating in
+# the deployment at hand.
+# ---------------------------------------------------------------------------
+[[rule]]
+id = "command_of_interest"
+kind = "command_of_interest"
+title = "Execution of a command of interest"
+description = """
+The attacker ran one of the configured executables: download or transfer
+tooling, raw sockets, encoders, interpreters or persistence helpers.
+"""
+commands = [
+    "wget",
+    "curl",
+    "tftp",
+    "ftp",
+    "scp",
+    "sftp",
+    "rsync",
+    "nc",
+    "ncat",
+    "netcat",
+    "socat",
+    "base64",
+    "openssl",
+    "gpg",
+    "xz",
+    "zip",
+    "perl",
+    "python",
+    "python2",
+    "python3",
+    "ruby",
+    "php",
+    "node",
+    "busybox",
+    "chmod",
+    "chown",
+    "crontab",
+    "ssh-keygen",
+    "powershell",
+    "certutil",
+]
+event_types = ["command.success", "command.failed", "command.input", "command.stdin"]
+
+# ---------------------------------------------------------------------------
+# 3. Download or transfer of a file.
+#
+# Every matching event becomes one finding, and its evidence keeps whatever the
+# honeypot reported about the file: URL, destination name and hashes.
+# ---------------------------------------------------------------------------
+[[rule]]
+id = "file_download"
+kind = "file_transfer"
+title = "File download or transfer"
+description = """
+The honeypot was asked to download or to send a file, which is how a payload
+usually arrives.
+"""
+event_types = ["transfer.download", "transfer.download_failed", "transfer.upload"]
