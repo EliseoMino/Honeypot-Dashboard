@@ -25,6 +25,9 @@ logs/
 infrastructure/cowrie/data/
 infrastructure/cowrie/etc/
 
+# Local runtime state: TLS material and ingestion spool
+var/
+
 # Local databases and volumes
 pgdata/
 data/

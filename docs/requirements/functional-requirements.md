@@ -1,7 +1,7 @@
 RF-01 — Ingesta de eventos del honeypot
 Descripción
 
-El sistema deberá recibir y procesar los eventos generados por Cowrie, incluyendo como mínimo eventos de autenticación, sesiones, comandos ejecutados y transferencias de archivos cuando estén disponibles.
+El sistema deberá ser capaz de capturar de forma continua y en tiempo real (o cuasi-real) los registros de actividad generados por el honeypot Cowrie. El componente de ingesta leerá la salida estructurada del honeypot y transportará los datos de manera segura hacia el backend o pipeline de procesamiento del sistema, garantizando que no se pierdan eventos críticos.Criterios de Aceptación (Funcionales)El componente de ingesta debe recolectar, como mínimo, los siguientes tipos de eventos nativos de Cowrie mediante la lectura de su archivo JSON:Eventos de Conexión y Sesión: Registro de IP de origen, puerto de origen, puerto de destino (SSH o Telnet) e inicios/cierres de conexiones (cowrie.session.connect, cowrie.session.closed).Eventos de Autenticación: Intentos de inicio de sesión, incluyendo combinaciones de usuario y contraseña provistas por el atacante, así como el resultado de la autenticación (éxito simulado o fallo) (cowrie.login.success, cowrie.login.failed).Eventos de Comandos Ejecutados: Comandos interactivos completos y argumentos ingresados por el atacante dentro de la shell simulada (cowrie.command.success, cowrie.command.failed).Eventos de Transferencias y Descargas: Intentos de descargar herramientas maliciosas, scripts o binarios (URLs utilizadas, hashes MD5/SHA256 generados por Cowrie para el archivo y nombres de archivos asignados) (cowrie.session.file_download, cowrie.client.fingerprint).Requisitos Técnicos y de ArquitecturaFormato de Origen: La ingesta se realizará exclusivamente a partir del archivo estructurado cowrie.json. Queda descartado el uso de logs en formato de texto plano (cowrie.log) debido a la ineficiencia de parseo.Mecanismo de Captura (Agente): Se utilizará un agente de transporte de logs ligero (por ejemplo, Filebeat, Fluent Bit o un script/daemon propio en Python/Go) instalado en la máquina del honeypot para evitar sobrecargar los recursos del contenedor o servidor.Modo de Lectura: El agente operará en modo "Tail" (lectura continua desde el final del archivo) y deberá mantener un registro del último estado de lectura (registry/checkpoint). Esto garantiza que, ante una caída del sistema de ingesta, la recolección se reanude exactamente en el último evento enviado, evitando la pérdida o duplicación masiva de datos.Seguridad en el Transporte: El canal de comunicación entre el agente de ingesta (Honeypot) y el sistema receptor central (Backend/SIEM) deberá estar estrictamente cifrado mediante TLS 1.3 (Transport Layer Security) para evitar la interceptación o manipulación de la telemetría en tránsito.
 
 Prioridad: Alta
 MVP: Sí
@@ -29,9 +29,18 @@ Prioridad: Alta
 MVP: Sí
 
 RF-03 — Almacenamiento de eventos
-Descripción
 
-El sistema deberá almacenar los eventos procesados en una base de datos persistente, permitiendo su posterior consulta y análisis.
+El sistema deberá persistir en PostgreSQL los eventos normalizados provenientes del componente de ingesta, permitiendo su consulta, filtrado, ordenamiento y agregación desde el backend.
+
+Los eventos deberán conservar los atributos comunes utilizados por el sistema, incluyendo timestamp, IP de origen, tipo de evento y session ID cuando estén disponibles. Los atributos específicos de cada evento podrán almacenarse mediante un campo JSONB.
+
+La base de datos deberá utilizar almacenamiento persistente para evitar la pérdida de información ante reinicios de los servicios.
+Base de datos: PostgreSQL
+Ejecución: Docker
+Persistencia: Docker Volume
+Datos variables: JSONB
+ORM/driver: se definirá al implementar FastAPI
+Índices: timestamp, src_ip, event_type, session_id
 
 Prioridad: Alta
 MVP: Sí
