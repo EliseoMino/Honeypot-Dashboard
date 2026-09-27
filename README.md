@@ -55,7 +55,26 @@ comandos genera los eventos que disparan las reglas de detección.
 ssh -p 2222 root@127.0.0.1
 ```
 
-Después, las alertas se generan evaluando las reglas:
+Para no depender de un atacante real hay un simulador que recorre escenarios
+reproducibles y dice qué eventos se espera ver en cada uno:
+
+```bash
+pip install -e "agent[dev]"
+python scripts/simulate-attack.py --list
+python scripts/simulate-attack.py --all
+python scripts/simulate-attack.py bruteforce session
+```
+
+Dos advertencias sobre el comportamiento real de Cowrie, porque desconciertan:
+
+- Las credenciales válidas no son las obvias. El simulador las descubre
+  probando y no las asume, así que no hace falta conocerlas de antemano.
+- El escenario `download` necesita salida a Internet: Cowrie se niega a
+  descargar desde direcciones que no sean globalmente enrutables, por protección
+  contra SSRF. Un servidor en la red de Docker o en la máquina host no sirve.
+
+Las reglas de detección se evalúan bajo demanda, no al ingerir. Para que los
+eventos del simulador se conviertan en alertas hace falta disparar la corrida:
 
 ```bash
 curl -s -X POST http://127.0.0.1:3000/api/v1/detections/run \
@@ -75,7 +94,7 @@ genera.
 | `infrastructure/cowrie/` | Configuración de Cowrie y sus datos de ejecución. |
 | `infrastructure/nginx/` | Proxy mTLS: el puente entre el navegador y el backend. |
 | `infrastructure/detection/` | Reglas de detección. |
-| `scripts/` | Utilidades, incluido el generador de la PKI de desarrollo. |
+| `scripts/` | Utilidades, incluidos la PKI de desarrollo y el simulador de ataques. |
 | `docs/requirements/` | Requisitos funcionales. |
 
 ## Desarrollo fuera de Docker

@@ -10,7 +10,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# paramiko is here only for scripts/simulate-attack.py, the development tool that
+# drives the honeypot. It is deliberately not a runtime dependency of the agent.
 dev = [
+    "paramiko>=3.4",
     "pytest>=8.0",
 ]
 
