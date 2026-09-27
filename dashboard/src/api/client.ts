@@ -8,10 +8,14 @@
 import type {
   Alert,
   AlertPage,
+  CommandPage,
   EventPage,
   EventSummary,
   NormalizedEvent,
   Order,
+  SessionPage,
+  SourceDetail,
+  SourcePage,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -36,6 +40,27 @@ export interface AlertQuery {
   severity?: string;
   sourceIp?: string;
   sessionId?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface SessionQuery {
+  sourceIp?: string;
+  username?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface CommandQuery {
+  sourceIp?: string;
+  sessionId?: string;
+  username?: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface SourceQuery {
   limit: number;
   offset: number;
 }
@@ -134,4 +159,44 @@ export function fetchAlertPage(query: AlertQuery, signal?: AbortSignal): Promise
 
 export function fetchAlert(alertId: number, signal?: AbortSignal): Promise<Alert> {
   return request<Alert>(`/api/v1/alerts/${alertId}`, signal);
+}
+
+export function fetchSessionPage(
+  query: SessionQuery,
+  signal?: AbortSignal,
+): Promise<SessionPage> {
+  const { sourceIp, username, limit, offset } = query;
+  return request<SessionPage>(
+    `/api/v1/sessions${queryString({ source_ip: sourceIp, username, limit, offset })}`,
+    signal,
+  );
+}
+
+export function fetchCommandPage(
+  query: CommandQuery,
+  signal?: AbortSignal,
+): Promise<CommandPage> {
+  const { sourceIp, sessionId, username, search, limit, offset } = query;
+  return request<CommandPage>(
+    `/api/v1/commands${queryString({
+      source_ip: sourceIp,
+      session_id: sessionId,
+      username,
+      q: search,
+      limit,
+      offset,
+    })}`,
+    signal,
+  );
+}
+
+export function fetchSourcePage(query: SourceQuery, signal?: AbortSignal): Promise<SourcePage> {
+  return request<SourcePage>(
+    `/api/v1/sources${queryString({ limit: query.limit, offset: query.offset })}`,
+    signal,
+  );
+}
+
+export function fetchSource(sourceIp: string, signal?: AbortSignal): Promise<SourceDetail> {
+  return request<SourceDetail>(`/api/v1/sources/${encodeURIComponent(sourceIp)}`, signal);
 }

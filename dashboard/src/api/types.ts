@@ -140,3 +140,70 @@ export function severityRank(severity: AlertSeverity): number {
   const rank = ALERT_SEVERITIES_BY_RANK.indexOf(severity);
   return rank === -1 ? ALERT_SEVERITIES_BY_RANK.length : rank;
 }
+
+/** Types mirroring `honeypot_backend.api.sessions` (RF-08). */
+export interface SessionSummary {
+  session_id: string;
+  source_ip: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  duration_ms: number | null;
+  event_count: number;
+  command_count: number;
+  usernames: string[];
+  protocols: string[];
+  has_authentication: boolean;
+  has_success: boolean;
+}
+
+export interface SessionPage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: SessionSummary[];
+}
+
+/** Types mirroring `honeypot_backend.api.commands` (RF-09). */
+export interface CommandRecord {
+  event_id: string;
+  event_type: string;
+  occurred_at: string | null;
+  source_ip: string | null;
+  session_id: string | null;
+  username: string | null;
+  outcome: string | null;
+  command: string | null;
+  command_line: string | null;
+}
+
+export interface CommandPage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: CommandRecord[];
+}
+
+/** Types mirroring `honeypot_backend.api.sources` (RF-10). */
+export interface SourceActivity {
+  source_ip: string;
+  event_count: number;
+  session_count: number;
+  auth_attempts: number;
+  commands: number;
+  transfers: number;
+  failures: number;
+  usernames: string[];
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+export interface SourcePage {
+  total: number;
+  limit: number;
+  offset: number;
+  items: SourceActivity[];
+}
+
+export interface SourceDetail extends SourceActivity {
+  by_category: CountEntry[];
+}

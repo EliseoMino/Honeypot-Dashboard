@@ -341,6 +341,11 @@ class EventRepository:
             last_seen.label("last_seen"),
             (span * 1000).label("duration_ms"),
             func.count().label("event_count"),
+            # RF-08 asks for the commands of each session. Counting by category
+            # keeps it a single grouped read, with no join on the details JSONB.
+            func.count()
+            .filter(Event.event_category == "command")
+            .label("command_count"),
             func.count(distinct(Event.session_id)).label("session_count"),
             func.array_agg(distinct(Event.username))
             .filter(Event.username.is_not(None))
@@ -482,6 +487,7 @@ class EventRepository:
             "last_seen": row.last_seen.isoformat() if row.last_seen else None,
             "duration_ms": int(row.duration_ms) if row.duration_ms is not None else None,
             "event_count": int(row.event_count or 0),
+            "command_count": int(row.command_count or 0),
             "usernames": _as_str_list(row.usernames),
             "protocols": _as_str_list(row.protocols),
             "has_authentication": bool(row.has_authentication),

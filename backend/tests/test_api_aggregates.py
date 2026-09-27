@@ -101,11 +101,25 @@ async def test_sessions_report_identifier_ip_span_and_duration(backend, cowrie_e
     assert first["last_seen"] == "2026-03-01T12:00:00+00:00"
     assert first["duration_ms"] == 60_000
     assert first["event_count"] == 2
+    # No command in this session, so the count is zero rather than missing.
+    assert first["command_count"] == 0
     assert first["usernames"] == ["root"]
     assert first["protocols"] == ["ssh"]
     assert first["has_authentication"] is True
     # Only a failed login, so the session has no successful outcome.
     assert first["has_success"] is False
+
+
+async def test_sessions_count_the_commands_each_one_ran(backend, cowrie_event) -> None:
+    """RF-08 lists the commands of a session, and they are counted by category."""
+
+    await backend.ingest(cowrie_event)
+
+    response = await backend.client.get("/api/v1/sessions", params={"order": "asc"})
+    by_id = {item["session_id"]: item for item in response.json()["items"]}
+
+    assert by_id["sess-1"]["command_count"] == 0
+    assert by_id["sess-2"]["command_count"] == 1
 
 
 async def test_sessions_are_ordered_by_their_last_event(backend, cowrie_event) -> None:

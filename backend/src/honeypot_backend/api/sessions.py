@@ -40,6 +40,7 @@ class SessionSummary(BaseModel):
         description="Milliseconds between the first and the last event of the session"
     )
     event_count: int
+    command_count: int = Field(description="Commands executed during the session")
     usernames: list[str] = Field(default_factory=list)
     protocols: list[str] = Field(default_factory=list)
     has_authentication: bool

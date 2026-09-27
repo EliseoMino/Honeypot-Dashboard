@@ -4,8 +4,12 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { EmptyState } from "./components/Feedback";
 import { AlertDetailPage } from "./pages/AlertDetailPage";
 import { AlertsPage } from "./pages/AlertsPage";
+import { CommandsPage } from "./pages/CommandsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventsPage } from "./pages/EventsPage";
+import { SessionsPage } from "./pages/SessionsPage";
+import { SourceDetailPage } from "./pages/SourceDetailPage";
+import { SourcesPage } from "./pages/SourcesPage";
 import { SummaryPage } from "./pages/SummaryPage";
 
 export function App(): ReactNode {
@@ -23,6 +27,15 @@ export function App(): ReactNode {
           <NavLink className="app__link" to="/events">
             Eventos
           </NavLink>
+          <NavLink className="app__link" to="/sessions">
+            Sesiones
+          </NavLink>
+          <NavLink className="app__link" to="/commands">
+            Comandos
+          </NavLink>
+          <NavLink className="app__link" to="/sources">
+            IPs
+          </NavLink>
         </nav>
       </header>
 
@@ -33,6 +46,10 @@ export function App(): ReactNode {
           <Route path="/alerts/:alertId" element={<AlertDetailPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/:eventId" element={<EventDetailPage />} />
+          <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/commands" element={<CommandsPage />} />
+          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/sources/:sourceIp" element={<SourceDetailPage />} />
           <Route
             path="*"
             element={<EmptyState>La página solicitada no existe.</EmptyState>}
