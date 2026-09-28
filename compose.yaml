@@ -1,5 +1,31 @@
 # Local development stack for Honeypot-Dashboard.
+#
+#   Cowrie -> agent -> backend -> PostgreSQL -> dashboard
+#
+# The dashboard is the only application service published to the host, and only
+# on the loopback interface. It reaches the backend over mutual TLS with its own
+# client certificate, so the browser never holds a private key and the ingestion
+# API is never exposed outside the compose networks.
+#
 # VPS deployment is intentionally out of scope for this phase.
+#
+# First run:
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# `cert-init` generates the development PKI on the way up, so there is no manual
+# step. Open http://127.0.0.1:3000 once the stack reports healthy.
+#
+# While iterating on the application, run it in watch mode instead:
+#
+#   docker compose up --watch
+#
+# The backend and the agent pick up edits to their sources without a rebuild, and
+# the dashboard is rebuilt when its sources change. See the `develop` block of
+# each service.
+
+name: honeypot-dashboard
 
 services:
   postgres:
@@ -10,6 +36,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
+      # Loopback only, and only for the backend test suite and psql.
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -18,18 +45,248 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      data:
+        aliases:
+          # The backend resolves the database by this name. Declared explicitly
+          # because the service name alias is not registered reliably by every
+          # Docker Desktop engine version.
+          - postgres
+
+  # Generates the development CA and the certificate pairs the transport needs.
+  # It runs once per `up` and is a no-op when valid material already exists, so
+  # restarting the stack does not rotate the CA out from under the services that
+  # already loaded it.
+  #
+  # The material lands in a named volume rather than a host bind mount: the
+  # containers run as unprivileged users whose uids do not match the host user,
+  # so a host owned 0600 private key would simply be unreadable inside them.
+  cert-init:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.cert-init
+    command: ["--out", "/certs", "--key-mode", "0644"]
+    volumes:
+      - certs:/certs
+    # Generating a local CA needs no network at all.
+    network_mode: none
+    restart: "no"
 
   cowrie:
-    image: ${COWRIE_IMAGE:-destruct/cowrie}
+    # Pinned: the JSON output section name and the event schema both changed
+    # between Cowrie 2.x and 3.x, so a floating tag would break the agent without
+    # anything failing loudly.
+    image: ${COWRIE_IMAGE:-cowrie/cowrie:3.0.15}
+    restart: unless-stopped
+    ports:
+      # Loopback only. A honeypot published on every interface is an open relay
+      # for anyone who finds the address; the VPS phase moves it behind a
+      # deliberate firewall.
+      - "127.0.0.1:${COWRIE_SSH_PORT:-2222}:2222"
+      - "127.0.0.1:${COWRIE_TELNET_PORT:-2223}:2223"
+    volumes:
+      # A single file, so the rest of etc/ stays exactly as the image ships it.
+      - ./infrastructure/cowrie/etc/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      # The whole var/ tree: cowrie.json, the tty logs, the downloaded artefacts
+      # and the SSH host keys. This is what the agent reads.
+      - ./infrastructure/cowrie/data:/cowrie/cowrie-git/var
+    networks:
+      data:
+        aliases:
+          - cowrie
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     depends_on:
-      - postgres
-    ports:
-      - "${COWRIE_SSH_PORT:-2222}:2222"
-      - "${COWRIE_TELNET_PORT:-2223}:2223"
+      postgres:
+        condition: service_healthy
+      cert-init:
+        condition: service_completed_successfully
+    environment:
+      HOST: 0.0.0.0
+      # Fixed rather than configurable: the agent, the nginx proxy and the
+      # healthcheck all have to agree on this port.
+      PORT: 8443
+      # Inside the compose network the database host is the service name, not
+      # the loopback address used when the backend runs on the host.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      TLS_CERTFILE: /certs/server.crt
+      TLS_KEYFILE: /certs/server.key
+      TLS_CA_CERTS: /certs/ca.crt
+      TLS_MIN_VERSION: TLSv1_3
+      SPOOL_DIR: /var/lib/honeypot/spool
+      DETECTION_RULES_PATH: /app/rules/rules.toml
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Watch mode runs the sources that are synced into /app/src, which is where
+      # the Dockerfile copies them, and that path wins over the copy `pip install .`
+      # leaves in site-packages. Without it a synced file would be ignored.
+      PYTHONPATH: /app/src
     volumes:
-      - ./infrastructure/cowrie/data:/opt/cowrie/var/cowrie
-      - ./infrastructure/cowrie/etc:/opt/cowrie/etc
+      - certs:/certs:ro
+      - spool:/var/lib/honeypot/spool
+      # The detection rules are read at startup, so restart the backend after
+      # editing rules.toml.
+      - ./infrastructure/detection:/app/rules:ro
+    # No published port on purpose: the dashboard is the only client and it
+    # authenticates with a certificate.
+    expose:
+      - "8443"
+    # `python -m` rather than the installed console script, so the process
+    # imports the synced sources from /app/src (see PYTHONPATH above).
+    command: ["python", "-m", "honeypot_backend"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./backend/src
+          target: /app/src
+          ignore:
+            - "**/__pycache__/**"
+            - "**/*.pyc"
+        # The dependencies are resolved when the image is built, so a change to
+        # the declared dependencies needs a rebuild and not a sync.
+        - action: rebuild
+          path: ./backend/pyproject.toml
+        # rules.toml is a read only bind mount that the API reads at startup, so
+        # a restart is all it takes to pick up an edited rule.
+        - action: restart
+          path: ./infrastructure/detection
+    networks:
+      data:
+        aliases:
+          # The agent posts here over mutual TLS.
+          - backend
+      edge:
+        aliases:
+          # nginx connects here with the proxy client certificate.
+          - backend
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+      cowrie:
+        condition: service_started
+    environment:
+      AGENT_ID: cowrie-agent
+      # Matches log_path in infrastructure/cowrie/etc/cowrie.cfg. The tailer
+      # waits for the file to appear, so starting before Cowrie has written its
+      # first line is fine.
+      AGENT_COWRIE_LOG_PATH: /cowrie/var/log/cowrie/cowrie.json
+      AGENT_CHECKPOINT_PATH: /var/lib/honeypot-agent/checkpoint.json
+      AGENT_BACKEND_URL: https://backend:8443/api/v1/ingest/events
+      AGENT_CA_CERTS: /certs/ca.crt
+      AGENT_CLIENT_CERT: /certs/agent.crt
+      AGENT_CLIENT_KEY: /certs/agent.key
+      AGENT_TLS_MIN_VERSION: TLSv1_3
+      # Read what Cowrie has already written instead of seeking to the end, so a
+      # restart during local development shows the history in the dashboard. On a
+      # deployed honeypot this should be true.
+      AGENT_START_AT_END: "false"
+      AGENT_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Watch mode runs the sources that are synced into /app/src, which is where
+      # the Dockerfile copies them, and that path wins over the copy `pip install .`
+      # leaves in site-packages. Without it a synced file would be ignored.
+      PYTHONPATH: /app/src
+    volumes:
+      - certs:/certs:ro
+      # Read only: the agent must never be able to alter the honeypot log it is
+      # supposed to observe.
+      - ./infrastructure/cowrie/data:/cowrie/var:ro
+      - agentstate:/var/lib/honeypot-agent
+    # `python -m` rather than the installed console script, so the process
+    # imports the synced sources from /app/src (see PYTHONPATH above).
+    command: ["python", "-m", "honeypot_agent"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./agent/src
+          target: /app/src
+          ignore:
+            - "**/__pycache__/**"
+            - "**/*.pyc"
+        # The dependencies are resolved when the image is built, so a change to
+        # the declared dependencies needs a rebuild and not a sync.
+        - action: rebuild
+          path: ./agent/pyproject.toml
+    networks:
+      data:
+        aliases:
+          - agent
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-3000}:8080"
+    volumes:
+      - certs:/certs:ro
+    develop:
+      watch:
+        # The dashboard is a compiled bundle served by nginx, so a source change
+        # means a new build: there is no running process that could pick up a
+        # synced file.
+        - action: rebuild
+          path: ./dashboard/src
+        - action: rebuild
+          path: ./dashboard/index.html
+        - action: rebuild
+          path: ./dashboard/vite.config.ts
+        - action: rebuild
+          path: ./dashboard/tsconfig.json
+        # A dependency change has to reinstall the tree from the lockfile.
+        - action: rebuild
+          path: ./dashboard/package.json
+        - action: rebuild
+          path: ./dashboard/package-lock.json
+        # The nginx configuration is not compiled, so it can simply be replaced
+        # in place and nginx reloaded with a restart of the container. The
+        # targets are the ones the dashboard Dockerfile copies them to, file by
+        # file: syncing the directory would drop the repository server block on
+        # top of the main nginx.conf that the image ships.
+        - action: sync+restart
+          path: ./infrastructure/nginx/nginx.conf
+          target: /etc/nginx/conf.d/default.conf
+        - action: sync+restart
+          path: ./infrastructure/nginx/honeypot-proxy.conf
+          target: /etc/nginx/honeypot-proxy.conf
+    networks:
+      edge:
+        aliases:
+          - dashboard
+
+networks:
+  # The browser facing side: only the dashboard and the backend are attached, so
+  # the ingestion API is reachable exclusively through the mTLS proxy.
+  edge:
+  # The processing side. The agent, the backend, the database and the honeypot
+  # meet here.
+  #
+  # This network is deliberately not `internal: true`: Docker does not publish
+  # ports for a container that is only attached to an internal network, which
+  # would silently take away the loopback SSH and Telnet ports of the honeypot
+  # and the database port the backend test suite needs. Isolation is enforced
+  # instead by publishing only on 127.0.0.1 and by not publishing the backend
+  # at all.
+  data:
 
 volumes:
   pgdata:
+  spool:
+  agentstate:
+  certs:

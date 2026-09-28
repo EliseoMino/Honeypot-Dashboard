@@ -176,65 +176,129 @@ La consulta deberá mostrar, cuando exista información:
 Prioridad: Media
 MVP: No — segunda iteración.
 
-RF-11 — Detección de actividad sospechosa
-Descripción
+# RF-11 — Detección de actividad sospechosa
 
-El sistema deberá analizar los eventos almacenados y identificar patrones de actividad que cumplan reglas de detección configuradas.
+## Descripción
 
-Inicialmente podrá contemplar reglas como:
+El sistema deberá analizar los eventos registrados por el honeypot e identificar patrones de actividad que coincidan con reglas de detección configuradas.
 
-    Múltiples intentos de autenticación.
+Las reglas deberán permitir identificar actividad potencialmente sospechosa a partir de eventos individuales, repetición de eventos, frecuencia de ocurrencia y combinación de diferentes eventos relacionados.
 
-    Repetición de intentos desde una misma IP.
+Cuando una actividad cumpla las condiciones de una regla de detección, el sistema deberá identificarla como una actividad sospechosa y permitir la generación de una alerta asociada.
 
-    Ejecución de determinados comandos.
+## Detecciones iniciales
 
-    Descarga de archivos.
+Como parte de la primera versión del sistema, se contemplarán reglas básicas como:
 
-    Combinaciones de eventos consideradas relevantes.
+* Múltiples intentos de autenticación fallidos.
+* Repetición de intentos de autenticación desde una misma dirección IP.
+* Ejecución de determinados comandos considerados relevantes para la investigación.
+* Descarga o transferencia de archivos.
+* Combinaciones simples de eventos relacionados.
 
-Prioridad: Alta
-MVP: Sí, pero con reglas básicas.
+Las reglas iniciales deberán utilizar información disponible en los eventos almacenados y deberán ser explícitas y determinísticas.
 
-RF-12 — Generación de alertas
-Descripción
+## MVP
 
-Cuando una regla de detección se cumpla, el sistema deberá generar una alerta asociada al evento o conjunto de eventos correspondiente.
+Para el MVP se implementará un conjunto reducido de reglas básicas, priorizando aquellas que puedan ser evaluadas directamente a partir de los eventos disponibles.
+
+Como mínimo, el MVP deberá contemplar:
+
+1. **Múltiples intentos de autenticación desde una misma IP**
+
+   * Detectar una cantidad configurable de intentos dentro de un período determinado.
+   * Registrar la IP involucrada y los eventos que provocaron la detección.
+
+2. **Ejecución de comandos relevantes**
+
+   * Detectar la ejecución de comandos incluidos en una lista de comandos de interés.
+   * Registrar el comando, la IP, la sesión y el evento asociado cuando esta información esté disponible.
+
+3. **Descarga o transferencia de archivos**
+
+   * Detectar eventos de descarga o transferencia de archivos registrados por el honeypot.
+   * Registrar la información disponible asociada al evento.
+
+El MVP no deberá implementar técnicas de machine learning, análisis avanzado de comportamiento, inteligencia de amenazas externa ni correlaciones complejas entre grandes cantidades de eventos.
+
+## Evolución posterior
+
+La versión completa podrá ampliar el motor de detección para contemplar:
+
+* Reglas configurables sin modificar el código de la aplicación.
+* Diferentes niveles de severidad.
+* Ventanas temporales configurables.
+* Correlación de múltiples eventos.
+* Detección de secuencias de comportamiento.
+* Agrupación de eventos relacionados con una misma actividad.
+* Reglas específicas por dirección IP, sesión o tipo de evento.
+* Habilitación y deshabilitación de reglas.
+* Registro de la evidencia que provocó cada detección.
+* Prevención de generación de alertas duplicadas.
+* Incorporación de nuevas reglas sin modificar el funcionamiento del resto del sistema.
+
+Las reglas deberán diseñarse de forma que puedan ampliarse progresivamente sin modificar la estructura principal del sistema.
+
+## Prioridad
+
+Alta
+
+## MVP
+
+Sí — con reglas básicas.
+
+
+# RF-12 — Generación de alertas
+
+## Descripción
+
+Cuando una regla de detección definida en RF-11 se cumpla, el sistema deberá generar una alerta asociada al evento o conjunto de eventos que provocó la detección.
+
+La alerta deberá conservar la información necesaria para identificar y analizar la actividad detectada.
 
 La alerta deberá incluir, cuando corresponda:
 
-    Tipo de alerta.
+* Tipo de alerta.
+* Fecha y hora de generación.
+* Dirección IP de origen.
+* Sesión relacionada.
+* Evidencia que provocó la detección.
+* Nivel de severidad.
 
-    Fecha y hora.
+La evidencia deberá permitir identificar los eventos que provocaron la generación de la alerta.
 
-    IP de origen.
+Cuando una misma actividad provoque múltiples evaluaciones de una regla, el sistema deberá evitar la generación innecesaria de alertas duplicadas, cuando sea posible identificar que corresponden a la misma detección.
 
-    Sesión relacionada.
+## MVP
 
-    Evidencia que provocó la alerta.
+El MVP deberá:
 
-    Nivel de severidad.
+* Generar una alerta cuando una regla de RF-11 sea activada.
+* Asociar la alerta con el evento o eventos que provocaron la detección.
+* Registrar la información disponible de la actividad detectada.
+* Asignar un nivel de severidad definido por la regla.
+* Persistir las alertas para su posterior consulta desde el dashboard.
 
-Prioridad: Alta
-MVP: Sí.
+El MVP no requiere notificaciones externas, como correo electrónico, Discord, Telegram o servicios similares.
 
-RF-13 — Consulta de alertas
-Descripción
+## Evolución posterior
 
-El sistema deberá permitir al usuario consultar las alertas generadas y acceder al detalle de cada una.
+La generación de alertas podrá ampliarse posteriormente para contemplar:
 
-Deberá ser posible filtrar las alertas por:
+* Estados de alerta, como pendiente, revisada o resuelta.
+* Agrupación de alertas relacionadas.
+* Deduplicación más avanzada.
+* Reglas para controlar la frecuencia de generación de alertas.
+* Notificaciones externas.
+* Priorización y gestión de incidentes.
 
-    Severidad.
+## Prioridad
 
-    Tipo.
+Alta
 
-    Fecha.
+## MVP
 
-    Dirección IP.
-
-Prioridad: Media
-MVP: No — segunda iteración.
+Sí
 
 RF-13 — Consulta de alertas
 Descripción
