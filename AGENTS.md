@@ -70,8 +70,17 @@ Agents must consult this file before implementing functionality.
 
 ## Current development phase
 
-The project is currently in the initial design and local development phase.
+The project is in the initial design and local development phase, with a VPS
+deployment started via Coolify (`compose.coolify.yaml`).
 
-The VPS deployment is NOT part of the initial local development environment.
+The VPS deployment is scoped to the private dashboard MVP only:
 
-Do not implement VPS deployment unless explicitly requested.
+- Dashboard accessible exclusively via SSH tunnel (no Coolify/Traefik domain,
+  no application authentication). See `docs/deployment/coolify.md`.
+- Internal services (PostgreSQL, agent, backend) are never published to the host.
+
+Out of scope for now, must not be implemented unless explicitly requested:
+
+- Exposing Cowrie on a public port, moving or touching the host's sshd (port 22).
+- Dashboard authentication.
+- Any change to unrelated resources (project VMR) on the same VPS.

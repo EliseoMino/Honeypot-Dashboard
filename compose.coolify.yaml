@@ -1,0 +1,220 @@
+# VPS deploy manifest for Honeypot-Dashboard, designed to run under Coolify.
+#
+#   Cowrie -> agent -> backend -> PostgreSQL -> dashboard
+#
+# Differences from the local compose.yaml:
+#
+#   - PostgreSQL is not published to the host at all: inside the Coolify
+#     compose network the backend reaches it by the service name.
+#   - Cowrie logs, downloads and SSH host keys live in the named volume
+#     `cowrie-var` instead of the repository directory, so a Coolify redeploy
+#     (which recreates the repo clone) never wipes them or rotates the host keys.
+#   - The `develop` watch blocks are dropped: they only make sense for
+#     `docker compose up --watch`.
+#
+# Access model:
+#
+#   - The dashboard is the only published port, and it binds to the loopback
+#     interface (127.0.0.1). In Coolify, do NOT assign a domain to this Compose:
+#     Traefik then never exposes it. Reach it over an SSH tunnel:
+#
+#       ssh -N -L 3000:127.0.0.1:3000 user@vps
+#       # then open http://127.0.0.1:3000
+#
+#   - Cowrie is loopback-only for now. Exposing it on a public port (distinct
+#     from the host's sshd on 22) is the next phase and depends on VPS provider
+#     firewall rules.
+#
+# Load the secrets and tunables in the Coolify UI under the resource's
+# environment variables. See .env.example -> "VPS / Coolify deployment".
+
+name: honeypot-dashboard
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      data:
+        aliases:
+          - postgres
+
+  # Generates the CA and the certificate pairs the transport needs. It runs once
+  # per `up` and is a no-op when valid material already exists, so restarts and
+  # redeploys do not rotate the CA out from under the services that already load
+  # it. The material lands in a named volume that survives redeploys.
+  cert-init:
+    build:
+      context: .
+      dockerfile: scripts/Dockerfile.cert-init
+    command: ["--out", "/certs", "--key-mode", "0644"]
+    volumes:
+      - certs:/certs
+    # Generating a local CA needs no network at all.
+    network_mode: none
+    restart: "no"
+
+  cowrie:
+    # Pinned: the JSON output section name and the event schema both changed
+    # between Cowrie 2.x and 3.x, so a floating tag would break the agent without
+    # anything failing loudly.
+    image: ${COWRIE_IMAGE:-cowrie/cowrie:3.0.15}
+    restart: unless-stopped
+    ports:
+      # Loopback only for now. A honeypot published on every interface is an open
+      # relay for anyone who finds the address; the public exposure phase moves
+      # it behind a deliberate VPS firewall rule.
+      - "127.0.0.1:${COWRIE_SSH_PORT:-2222}:2222"
+      - "127.0.0.1:${COWRIE_TELNET_PORT:-2223}:2223"
+    volumes:
+      # A single file, so the rest of etc/ stays exactly as the image ships it.
+      - ./infrastructure/cowrie/etc/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      # The whole var/ tree: cowrie.json, the tty logs, the downloaded artefacts
+      # and the SSH host keys. Named volume: survives a Coolify redeploy.
+      - cowrie-var:/cowrie/cowrie-git/var
+    networks:
+      data:
+        aliases:
+          - cowrie
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cert-init:
+        condition: service_completed_successfully
+    environment:
+      HOST: 0.0.0.0
+      # Fixed rather than configurable: the agent, the nginx proxy and the
+      # healthcheck all have to agree on this port.
+      PORT: 8443
+      # Inside the compose network the database host is the service name.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      TLS_CERTFILE: /certs/server.crt
+      TLS_KEYFILE: /certs/server.key
+      TLS_CA_CERTS: /certs/ca.crt
+      TLS_MIN_VERSION: TLSv1_3
+      SPOOL_DIR: /var/lib/honeypot/spool
+      DETECTION_RULES_PATH: /app/rules/rules.toml
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # The Dockerfile copies the sources into /app/src; that path wins over the
+      # copy `pip install .` leaves in site-packages.
+      PYTHONPATH: /app/src
+    volumes:
+      - certs:/certs:ro
+      - spool:/var/lib/honeypot/spool
+      # The detection rules are read at startup, so edit them in the repository
+      # and redeploy (or restart the backend) to apply a change.
+      - ./infrastructure/detection:/app/rules:ro
+    # No published port: the dashboard is the only client and it authenticates
+    # with a client certificate.
+    expose:
+      - "8443"
+    command: ["python", "-m", "honeypot_backend"]
+    networks:
+      data:
+        aliases:
+          # The agent posts here over mutual TLS.
+          - backend
+      edge:
+        aliases:
+          # nginx connects here with the proxy client certificate.
+          - backend
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+      cowrie:
+        condition: service_started
+    environment:
+      AGENT_ID: cowrie-agent
+      # Matches log_path in infrastructure/cowrie/etc/cowrie.cfg. The tailer
+      # waits for the file to appear, so starting before Cowrie has written its
+      # first line is fine.
+      AGENT_COWRIE_LOG_PATH: /cowrie/var/log/cowrie/cowrie.json
+      AGENT_CHECKPOINT_PATH: /var/lib/honeypot-agent/checkpoint.json
+      AGENT_BACKEND_URL: https://backend:8443/api/v1/ingest/events
+      AGENT_CA_CERTS: /certs/ca.crt
+      AGENT_CLIENT_CERT: /certs/agent.crt
+      AGENT_CLIENT_KEY: /certs/agent.key
+      AGENT_TLS_MIN_VERSION: TLSv1_3
+      # Read only what is written after startup: the deployment history is not
+      # replayed into the fresh database on every redeploy.
+      AGENT_START_AT_END: "true"
+      AGENT_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONPATH: /app/src
+    volumes:
+      - certs:/certs:ro
+      # Same named volume Cowrie writes to. Read only: the agent must never be
+      # able to alter the honeypot log it is supposed to observe.
+      - cowrie-var:/cowrie/var:ro
+      - agentstate:/var/lib/honeypot-agent
+    command: ["python", "-m", "honeypot_agent"]
+    networks:
+      data:
+        aliases:
+          - agent
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cert-init:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    ports:
+      # Loopback only. In Coolify this keeps the dashboard off Traefik; reach it
+      # through an SSH tunnel from a machine that trusts the user.
+      - "127.0.0.1:${DASHBOARD_PORT:-3000}:8080"
+    volumes:
+      - certs:/certs:ro
+    networks:
+      edge:
+        aliases:
+          - dashboard
+
+networks:
+  # The browser facing side: only the dashboard and the backend are attached, so
+  # the ingestion API is reachable exclusively through the mTLS proxy.
+  edge:
+  # The processing side. The agent, the backend, the database and the honeypot
+  # meet here.
+  #
+  # This network is deliberately not `internal: true`: Docker does not publish
+  # ports for a container that is only attached to an internal network, which
+  # would silently take away the loopback SSH and Telnet ports of the honeypot.
+  # Isolation is enforced instead by publishing only on 127.0.0.1 and by not
+  # publishing the backend at all.
+  data:
+
+volumes:
+  pgdata:
+  spool:
+  agentstate:
+  certs:
+  cowrie-var:
