@@ -25,6 +25,51 @@ Internet
 - A VPS whose sshd owns port 22. Cowrie does not use it.
 - A git remote containing this repository.
 
+## SSH keys: who is who
+
+An SSH key is a **pair** of files that identifies you to a server:
+
+- **Private key**: secret, never leaves your machine (e.g. `~/.ssh/id_ed25519`).
+- **Public key**: safe to share, ends with `.pub` (e.g.
+  `~/.ssh/id_ed25519.pub`). Its content starts with `ssh-ed25519` (or `ssh-rsa`)
+  and is the part that goes into the server's `~/.ssh/authorized_keys`.
+
+There are two distinct key pairs in this setup:
+
+| Key | Owned by | Public key lives | Used for |
+| --- | --- | --- | --- |
+| Coolify's server key | Coolify | generated when you add the server, viewable in Coolify UI (Server -> Keys) | Coolify runs the deploy on the VPS |
+| Your workstation key | You | copied into the VPS `authorized_keys` of the deploy/ssh user | the SSH tunnel to the dashboard |
+
+No SSH password is involved on a key-only setup (recommended:
+`PasswordAuthentication no` in `/etc/ssh/sshd_config`). The server proves you
+are you by asking your key to sign a challenge.
+
+If you have no local key yet, generate one:
+
+```sh
+ssh-keygen -t ed25519 -C "you@workstation"
+# ~/.ssh/id_ed25519 (private) + ~/.ssh/id_ed25519.pub (public)
+```
+
+Then append `id_ed25519.pub` to the VPS user's `authorized_keys`. Never commit
+private keys or SSH passwords to the repository.
+
+## SSH tunnel to the dashboard
+
+A convenient `~/.ssh/config` alias on your workstation:
+
+```
+Host honeypot-vps
+    HostName <ip-vps>
+    User <user>
+    LocalForward 3000 127.0.0.1:3000
+```
+
+`ssh honeypot-vps` then gives you both the tunnel and a shell. The dashboard is
+**http://127.0.0.1:3000** on your browser. The tunnel only exposes the nginx
+dashboard; Cowrie's loopback ports are not forwarded.
+
 ## Deploy steps in Coolify
 
 1. Create a new resource of type **Application** with the **Docker Compose**
@@ -57,7 +102,8 @@ docker ps
 - PostgreSQL has **no** host binding.
 - No public route: the resource has no domain, so Traefik ignores it.
 
-From your workstation, tunnel into the dashboard:
+From your workstation, tunnel into the dashboard (see the SSH section above for
+the one-shot command and the `~/.ssh/config` alias):
 
 ```sh
 ssh -N -L 3000:127.0.0.1:3000 user@vps
