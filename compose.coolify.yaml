@@ -18,12 +18,12 @@
 #     interface (127.0.0.1). In Coolify, do NOT assign a domain to this Compose:
 #     Traefik then never exposes it. Reach it over an SSH tunnel:
 #
-#       ssh -N -L 3000:127.0.0.1:3000 user@vps
+#       ssh -p 22222 -N -L 3000:127.0.0.1:3000 user@vps
 #       # then open http://127.0.0.1:3000
 #
-#   - Cowrie is loopback-only for now. Exposing it on a public port (distinct
-#     from the host's sshd on 22) is the next phase and depends on VPS provider
-#     firewall rules.
+#   - Cowrie SSH and Telnet are published on host ports 22 and 23. The VPS
+#     administrator SSH listener must use a separate port (22222 by default).
+#     Allow 22/23 in the provider firewall to receive public honeypot traffic.
 #
 # Load the secrets and tunables in the Coolify UI under the resource's
 # environment variables. See .env.example -> "VPS / Coolify deployment".
@@ -72,11 +72,10 @@ services:
     image: ${COWRIE_IMAGE:-cowrie/cowrie:3.0.15}
     restart: unless-stopped
     ports:
-      # Loopback only for now. A honeypot published on every interface is an open
-      # relay for anyone who finds the address; the public exposure phase moves
-      # it behind a deliberate VPS firewall rule.
-      - "127.0.0.1:${COWRIE_SSH_PORT:-2222}:2222"
-      - "127.0.0.1:${COWRIE_TELNET_PORT:-2223}:2223"
+      # Public honeypot ports. The host sshd must be moved away from port 22
+      # before deploying this mapping. 23 carries Cowrie Telnet.
+      - "22:2222"
+      - "23:2223"
     volumes:
       # A single file, so the rest of etc/ stays exactly as the image ships it.
       - ./infrastructure/cowrie/etc/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
@@ -208,8 +207,8 @@ networks:
   # This network is deliberately not `internal: true`: Docker does not publish
   # ports for a container that is only attached to an internal network, which
   # would silently take away the loopback SSH and Telnet ports of the honeypot.
-  # Isolation is enforced instead by publishing only on 127.0.0.1 and by not
-  # publishing the backend at all.
+  # The dashboard is published only on 127.0.0.1 and the backend is not
+  # published. Cowrie is intentionally published on host ports 22 and 23.
   data:
 
 volumes:
