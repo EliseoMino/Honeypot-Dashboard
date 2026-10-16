@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from honeypot_backend.config import Settings
 from honeypot_backend.db.repository import EventRepository
 from honeypot_backend.db.session import apply_migrations, get_engine
+from honeypot_backend.alerts import drafts_for_detections
+from honeypot_backend.db.repository import AlertRepository, DetectionRepository
+from honeypot_backend.detection import DetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +44,12 @@ class NormalizedSpoolReplayer:
         normalized_dir: Path,
         *,
         sessionmaker: async_sessionmaker[AsyncSession] | None = None,
+        detection: DetectionService | None = None,
     ) -> None:
         self._settings = settings
         self._directory = Path(normalized_dir)
         self._sessionmaker = sessionmaker
+        self._detection = detection
         self._cursors: dict[str, int] = {}
         self._schema_ready = False
         self._stopping = asyncio.Event()
@@ -51,6 +57,8 @@ class NormalizedSpoolReplayer:
         self.batches_loaded = 0
         self.malformed_lines = 0
         self.failures = 0
+        self.auto_detection_failures = 0
+        self.auto_detection_runs = 0
 
     @property
     def directory(self) -> Path:
@@ -108,6 +116,8 @@ class NormalizedSpoolReplayer:
             "batches_loaded": self.batches_loaded,
             "malformed_lines": self.malformed_lines,
             "failures": self.failures,
+            "auto_detection_runs": self.auto_detection_runs,
+            "auto_detection_failures": self.auto_detection_failures,
             "cursors": dict(self._cursors),
         }
 
@@ -115,6 +125,7 @@ class NormalizedSpoolReplayer:
         if not self._directory.is_dir():
             return []
         return sorted(self._directory.glob(SPOOL_GLOB), key=lambda item: item.name)
+
 
     async def _drain(self, path: Path) -> int:
         key = str(path)
@@ -144,6 +155,7 @@ class NormalizedSpoolReplayer:
             async with self._sessions()() as session:
                 repository = EventRepository(session)
                 inserted = await repository.insert_events(records)
+                await self._evaluate_rules(session, records)
                 await repository.set_cursor(key, new_offset)
                 await session.commit()
             self.batches_loaded += 1
@@ -155,6 +167,41 @@ class NormalizedSpoolReplayer:
 
         self._cursors[key] = new_offset
         return len(records)
+
+    async def _evaluate_rules(
+        self, session: AsyncSession, records: list[dict[str, Any]]
+    ) -> None:
+        """Evaluate deterministic rules on newly stored events, best effort."""
+
+        if self._detection is None or not self._detection.available or not records:
+            return
+        try:
+            timestamps = [_as_datetime(record["occurred_at"]) for record in records]
+            earliest = min(timestamps)
+            latest = max(timestamps)
+            max_rule_window = max(
+                (getattr(rule, "window_seconds", 1) for rule in self._detection.rules.rules),
+                default=1,
+            )
+            try:
+                async with session.begin_nested():
+                    found = await self._detection.run(
+                        session,
+                        occurred_from=earliest - timedelta(seconds=max_rule_window),
+                        occurred_to=latest,
+                    )
+                    created = await DetectionRepository(session).insert_detections(found)
+                    await AlertRepository(session).insert_alerts(
+                        drafts_for_detections(created, self._detection.rules)
+                    )
+            except Exception:
+                self.auto_detection_failures += 1
+                logger.exception("automatic detection failed for persisted event batch")
+                return
+            self.auto_detection_runs += 1
+        except (KeyError, TypeError, ValueError):
+            self.auto_detection_failures += 1
+            logger.exception("automatic detection skipped: event timestamp was invalid")
 
     async def _load_cursor(self, path: str) -> int:
         async with self._sessions()() as session:
@@ -209,3 +256,10 @@ def _read_batch(path: Path, offset: int, limit: int) -> tuple[list[dict[str, Any
             else:
                 malformed += 1
     return records, consumed, malformed
+
+
+def _as_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    parsed = datetime.fromisoformat(str(value))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)

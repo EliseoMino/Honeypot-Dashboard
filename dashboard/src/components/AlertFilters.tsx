@@ -8,6 +8,7 @@ export interface AlertFilterValues {
   ruleId: string;
   sourceIp: string;
   sessionId: string;
+  status: string;
 }
 
 export const EMPTY_ALERT_FILTERS: AlertFilterValues = {
@@ -16,6 +17,7 @@ export const EMPTY_ALERT_FILTERS: AlertFilterValues = {
   ruleId: "",
   sourceIp: "",
   sessionId: "",
+  status: "",
 };
 
 export function isAlertFiltered(filters: AlertFilterValues): boolean {
@@ -53,6 +55,17 @@ export function AlertFilters({
 
   return (
     <form className="filters" onSubmit={submit}>
+      <div className="filters__field">
+        <label htmlFor="alert-status">Estado</label>
+        <select id="alert-status" value={draft.status} onChange={(event) => update("status")(event.target.value)}>
+          <option value="">Todos</option>
+          <option value="new">Nueva</option>
+          <option value="in_progress">En análisis</option>
+          <option value="resolved">Resuelta</option>
+          <option value="false_positive">Falso positivo</option>
+        </select>
+      </div>
+
       <div className="filters__field">
         <label htmlFor="alert-severity">Severidad</label>
         <select

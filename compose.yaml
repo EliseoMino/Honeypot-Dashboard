@@ -14,8 +14,8 @@
 #   cp .env.example .env
 #   docker compose up -d --build
 #
-# `cert-init` generates the development PKI on the way up, so there is no manual
-# step. Open http://127.0.0.1:3000 once the stack reports healthy.
+# `cert-init` creates separate read-only PKI volumes per service; the CA private
+# key is mounted only into that one-shot initializer.
 #
 # While iterating on the application, run it in watch mode instead:
 #
@@ -53,21 +53,17 @@ services:
           # Docker Desktop engine version.
           - postgres
 
-  # Generates the development CA and the certificate pairs the transport needs.
-  # It runs once per `up` and is a no-op when valid material already exists, so
-  # restarting the stack does not rotate the CA out from under the services that
-  # already loaded it.
-  #
-  # The material lands in a named volume rather than a host bind mount: the
-  # containers run as unprivileged users whose uids do not match the host user,
-  # so a host owned 0600 private key would simply be unreadable inside them.
+  # Generates role-specific PKI. Only this initializer can read the CA private
+  # key; each runtime service mounts its own leaf key and public CA certificate.
   cert-init:
     build:
       context: .
       dockerfile: scripts/Dockerfile.cert-init
-    command: ["--out", "/certs", "--key-mode", "0644"]
     volumes:
-      - certs:/certs
+      - certs-ca-private:/ca-private
+      - certs-backend:/runtime/backend
+      - certs-agent:/runtime/agent
+      - certs-proxy:/runtime/proxy
     # Generating a local CA needs no network at all.
     network_mode: none
     restart: "no"
@@ -113,11 +109,12 @@ services:
       # Inside the compose network the database host is the service name, not
       # the loopback address used when the backend runs on the host.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      TLS_CERTFILE: /certs/server.crt
-      TLS_KEYFILE: /certs/server.key
-      TLS_CA_CERTS: /certs/ca.crt
+      TLS_CERTFILE: /cert-backend/server.crt
+      TLS_KEYFILE: /cert-backend/server.key
+      TLS_CA_CERTS: /cert-backend/ca.crt
       TLS_MIN_VERSION: TLSv1_3
       SPOOL_DIR: /var/lib/honeypot/spool
+      COWRIE_DATA_DIR: /cowrie/var
       DETECTION_RULES_PATH: /app/rules/rules.toml
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Watch mode runs the sources that are synced into /app/src, which is where
@@ -125,8 +122,9 @@ services:
       # leaves in site-packages. Without it a synced file would be ignored.
       PYTHONPATH: /app/src
     volumes:
-      - certs:/certs:ro
+      - certs-backend:/cert-backend:ro
       - spool:/var/lib/honeypot/spool
+      - ./infrastructure/cowrie/data:/cowrie/var:ro
       # The detection rules are read at startup, so restart the backend after
       # editing rules.toml.
       - ./infrastructure/detection:/app/rules:ro
@@ -183,9 +181,9 @@ services:
       AGENT_COWRIE_LOG_PATH: /cowrie/var/log/cowrie/cowrie.json
       AGENT_CHECKPOINT_PATH: /var/lib/honeypot-agent/checkpoint.json
       AGENT_BACKEND_URL: https://backend:8443/api/v1/ingest/events
-      AGENT_CA_CERTS: /certs/ca.crt
-      AGENT_CLIENT_CERT: /certs/agent.crt
-      AGENT_CLIENT_KEY: /certs/agent.key
+      AGENT_CA_CERTS: /cert-agent/ca.crt
+      AGENT_CLIENT_CERT: /cert-agent/agent.crt
+      AGENT_CLIENT_KEY: /cert-agent/agent.key
       AGENT_TLS_MIN_VERSION: TLSv1_3
       # Read what Cowrie has already written instead of seeking to the end, so a
       # restart during local development shows the history in the dashboard. On a
@@ -197,7 +195,7 @@ services:
       # leaves in site-packages. Without it a synced file would be ignored.
       PYTHONPATH: /app/src
     volumes:
-      - certs:/certs:ro
+      - certs-agent:/cert-agent:ro
       # Read only: the agent must never be able to alter the honeypot log it is
       # supposed to observe.
       - ./infrastructure/cowrie/data:/cowrie/var:ro
@@ -235,7 +233,7 @@ services:
     ports:
       - "127.0.0.1:${DASHBOARD_PORT:-3000}:8080"
     volumes:
-      - certs:/certs:ro
+      - certs-proxy:/cert-proxy:ro
     develop:
       watch:
         # The dashboard is a compiled bundle served by nginx, so a source change
@@ -289,4 +287,7 @@ volumes:
   pgdata:
   spool:
   agentstate:
-  certs:
+  certs-ca-private:
+  certs-backend:
+  certs-agent:
+  certs-proxy:

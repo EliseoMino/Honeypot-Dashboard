@@ -38,7 +38,9 @@ class CommandRecord(BaseModel):
     username: str | None
     outcome: str | None
     command: str | None = Field(description="The parsed command name, when Cowrie reported one")
-    command_line: str | None = Field(description="The full line as it was typed")
+    # Full command lines can contain passwords and tokens. The event detail
+    # endpoint is the deliberate path for inspecting that evidence.
+    command_line: None = None
 
 
 class CommandPage(BaseModel):

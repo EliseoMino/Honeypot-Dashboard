@@ -45,8 +45,10 @@ export interface EventPage {
   total: number;
   limit: number;
   offset: number;
-  items: NormalizedEvent[];
+  items: EventListItem[];
 }
+
+export type EventListItem = Omit<NormalizedEvent, "details" | "raw">;
 
 export interface EventSummary {
   total_events: number;
@@ -100,13 +102,26 @@ export interface Alert {
   event_count: number;
   evidence: Record<string, unknown>;
   generated_at: string;
+  status: AlertStatus;
+  notes: string;
+  false_positive_reason: string | null;
+  status_updated_at: string | null;
+}
+
+export type AlertStatus = "new" | "in_progress" | "resolved" | "false_positive";
+
+export interface AlertStatusChange {
+  previous_status: AlertStatus | null;
+  new_status: AlertStatus;
+  note: string;
+  changed_at: string;
 }
 
 export interface AlertPage {
   total: number;
   limit: number;
   offset: number;
-  items: Alert[];
+  items: Omit<Alert, "evidence">[];
 }
 
 export const ALERT_SEVERITIES: readonly AlertSeverity[] = [
@@ -220,4 +235,31 @@ export interface SeriesPoint {
 export interface TimeSeries {
   bucket: TimeBucket;
   points: SeriesPoint[];
+}
+
+export interface IngestStats {
+  metrics: {
+    last_batch_at: string | null;
+    last_agent_id: string | null;
+    events_received: number;
+    events_normalized: number;
+    events_rejected: number;
+    events_duplicated: number;
+    sequence_gaps: number;
+    sequence_replays: number;
+  };
+  spool: Record<string, unknown>;
+  replayer: {
+    events_loaded: number;
+    malformed_lines: number;
+    failures: number;
+    auto_detection_runs: number;
+    auto_detection_failures: number;
+  } | null;
+  storage: {
+    spool_bytes: number;
+    cowrie_data_bytes: number;
+    cowrie_log: { status: string; size_bytes: number | null; modified_at: string | null };
+    filesystem: { free_bytes: number | null; total_bytes: number | null };
+  };
 }

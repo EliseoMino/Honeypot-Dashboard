@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { fetchAlert } from "../api/client";
+import { fetchAlert, fetchAlertHistory, updateAlertTriage } from "../api/client";
+import type { AlertStatus } from "../api/types";
 import { ErrorBanner, Loading } from "../components/Feedback";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime, formatNumber } from "../utils/format";
@@ -21,7 +22,26 @@ function evidenceEventIds(evidence: Record<string, unknown>): string[] {
  */
 export function AlertDetailPage(): ReactNode {
   const { alertId = "" } = useParams();
-  const alert = useResource((signal) => fetchAlert(Number(alertId), signal), [alertId]);
+  const [showSensitive, setShowSensitive] = useState(false);
+  const [triageStatus, setTriageStatus] = useState<AlertStatus>("new");
+  const [notes, setNotes] = useState("");
+  const [falsePositiveReason, setFalsePositiveReason] = useState("");
+  const [triageMessage, setTriageMessage] = useState("");
+  const [savingTriage, setSavingTriage] = useState(false);
+  const alert = useResource(
+    (signal) => fetchAlert(Number(alertId), signal, showSensitive),
+    [alertId, showSensitive],
+  );
+  const history = useResource(
+    (signal) => fetchAlertHistory(Number(alertId), signal),
+    [alertId],
+  );
+  useEffect(() => {
+    if (alert.data === null) return;
+    setTriageStatus(alert.data.status);
+    setNotes(alert.data.notes);
+    setFalsePositiveReason(alert.data.false_positive_reason ?? "");
+  }, [alert.data]);
 
   if (alert.error !== null) {
     return (
@@ -62,6 +82,64 @@ export function AlertDetailPage(): ReactNode {
       </header>
 
       <div className="panels">
+        <section className="panel">
+          <h2 className="panel__title">Gestión de la alerta</h2>
+          <label className="field">
+            <span>Estado</span>
+            <select value={triageStatus} onChange={(event) => setTriageStatus(event.target.value as AlertStatus)}>
+              <option value="new">Nueva</option>
+              <option value="in_progress">En análisis</option>
+              <option value="resolved">Resuelta</option>
+              <option value="false_positive">Falso positivo</option>
+            </select>
+          </label>
+          {triageStatus === "false_positive" ? (
+            <label className="field">
+              <span>Motivo del falso positivo</span>
+              <input value={falsePositiveReason} maxLength={1000} onChange={(event) => setFalsePositiveReason(event.target.value)} />
+            </label>
+          ) : null}
+          <label className="field">
+            <span>Notas del operador</span>
+            <textarea value={notes} maxLength={4000} rows={4} onChange={(event) => setNotes(event.target.value)} />
+          </label>
+          <button
+            type="button"
+            className="button"
+            disabled={savingTriage || (triageStatus === "false_positive" && !falsePositiveReason.trim())}
+            onClick={async () => {
+              setSavingTriage(true);
+              setTriageMessage("");
+              try {
+                await updateAlertTriage(Number(alertId), {
+                  status: triageStatus,
+                  notes,
+                  false_positive_reason: triageStatus === "false_positive" ? falsePositiveReason : undefined,
+                });
+                await alert.reload();
+                setTriageMessage("Cambios guardados.");
+              } catch (error) {
+                setTriageMessage(error instanceof Error ? error.message : "No se pudieron guardar los cambios.");
+              } finally {
+                setSavingTriage(false);
+              }
+            }}
+          >
+            {savingTriage ? "Guardando…" : "Guardar gestión"}
+          </button>
+          {triageMessage ? <p role="status">{triageMessage}</p> : null}
+          <h3>Historial de estados</h3>
+          {history.data?.length ? (
+            <ul className="evidence-list">
+              {history.data.map((change, index) => (
+                <li key={`${change.changed_at}-${index}`}>
+                  {change.previous_status ?? "—"} → {change.new_status} · {formatDateTime(change.changed_at)}
+                  {change.note ? <p>{change.note}</p> : null}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="page__subtitle">Sin cambios de estado registrados.</p>}
+        </section>
         <section className="panel">
           <h2 className="panel__title">Alerta</h2>
           <dl className="attributes">
@@ -121,7 +199,17 @@ export function AlertDetailPage(): ReactNode {
         </section>
 
         <section className="panel">
-          <h2 className="panel__title">Evidencia</h2>
+        <div className="panel__header">
+          <h2 className="panel__title">Evidencia de la regla</h2>
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => setShowSensitive((value) => !value)}
+            aria-expanded={showSensitive}
+          >
+            {showSensitive ? "Ocultar evidencia completa" : "Revelar evidencia completa"}
+          </button>
+        </div>
           {evidence.length === 0 ? (
             <p className="state state--empty">La regla no adjuntó evidencia adicional.</p>
           ) : (

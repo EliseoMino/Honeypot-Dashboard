@@ -10,7 +10,11 @@ import { formatDateTime, formatEndpoint } from "../utils/format";
 export function EventDetailPage(): ReactNode {
   const { eventId = "" } = useParams();
   const [showRaw, setShowRaw] = useState(false);
-  const event = useResource((signal) => fetchEvent(eventId, signal), [eventId]);
+  const [showSensitive, setShowSensitive] = useState(false);
+  const event = useResource(
+    (signal) => fetchEvent(eventId, signal, showSensitive),
+    [eventId, showSensitive],
+  );
 
   if (event.error !== null) {
     return (
@@ -91,7 +95,17 @@ export function EventDetailPage(): ReactNode {
         </section>
 
         <section className="panel">
-          <h2 className="panel__title">Información específica</h2>
+          <div className="panel__header">
+            <h2 className="panel__title">Información específica</h2>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => { setShowSensitive((value) => !value); setShowRaw(false); }}
+              aria-expanded={showSensitive}
+            >
+              {showSensitive ? "Ocultar datos sensibles" : "Revelar datos sensibles"}
+            </button>
+          </div>
           {details.length === 0 ? (
             <p className="state state--empty">Este evento no tiene atributos específicos.</p>
           ) : (
@@ -112,13 +126,16 @@ export function EventDetailPage(): ReactNode {
           <button
             type="button"
             className="button button--ghost"
-            onClick={() => setShowRaw((value) => !value)}
+            onClick={() => {
+              if (!showSensitive) setShowSensitive(true);
+              setShowRaw((value) => !value);
+            }}
             aria-expanded={showRaw}
           >
             {showRaw ? "Ocultar" : "Mostrar"}
           </button>
         </div>
-        {showRaw ? <pre className="code">{JSON.stringify(data.raw, null, 2)}</pre> : null}
+        {showRaw && showSensitive ? <pre className="code">{JSON.stringify(data.raw, null, 2)}</pre> : null}
       </section>
     </div>
   );

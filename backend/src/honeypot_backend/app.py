@@ -37,9 +37,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_bytes=resolved.spool_max_bytes,
         fsync=resolved.spool_fsync,
     )
-    replayer = NormalizedSpoolReplayer(resolved, spool.normalized_dir)
-    metrics = IngestMetrics()
     detection = DetectionService.from_settings(resolved)
+    replayer = NormalizedSpoolReplayer(
+        resolved, spool.normalized_dir, detection=detection
+    )
+    metrics = IngestMetrics()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:

@@ -6,18 +6,12 @@ This document describes how to deploy Honeypot-Dashboard on a Coolify VPS using
 ## Access model (MVP)
 
 ```
-Internet
-├── Cowrie SSH   -> host TCP 22
-├── Cowrie Telnet -> host TCP 23
-└── Dashboard    -> private, only reachable via SSH tunnel
+Dashboard -> 127.0.0.1 on VPS -> SSH tunnel -> operator browser
 ```
 
 - The dashboard binds to `127.0.0.1` on the VPS and is assigned **no domain**,
-  so Coolify's Traefik never exposes it. Reach it through the host's own sshd
-  on TCP port `22222`, no bastion/jump host needed.
-- The VPS administrator's sshd listens on TCP port `22222`. Cowrie owns public
-  TCP ports `22` (SSH) and `23` (Telnet). Do not restore sshd to port `22` while
-  these mappings are deployed.
+  so Coolify's Traefik never exposes it. Reach it through SSH local forwarding.
+- No host SSH or Cowrie port changes are part of this private dashboard MVP.
 - PostgreSQL, the agent and the backend are **not published** to the host. They
   communicate over the Compose network by service name.
 - The backend is never reachable from outside: only the nginx proxy on the
@@ -129,11 +123,15 @@ events appear in the dashboard: agent -> backend (mTLS) -> PostgreSQL.
 | Cowrie logs / host keys   | volume `cowrie-var`               | yes               |
 | Backend spool             | volume `spool`                    | yes               |
 | Agent checkpoint          | volume `agentstate`               | yes               |
-| PKI (CA + certificates)   | volume `certs`                    | yes               |
+| CA private key            | volume `certs-ca-private`         | yes; initializer only |
+| Runtime certificates      | volumes `certs-backend`, `certs-agent`, `certs-proxy` | yes; per role |
 
-Cowrie's log and the agent checkpoint are intentionally kept aligned: a redeploy
-does not rotate the CA nor replay the pre-redeploy history into a fresh database
-(`AGENT_START_AT_END=true` in `compose.coolify.yaml`).
+The CA key volume is mounted only into `cert-init`. Each runtime role receives
+its own private key and the public CA certificate. PostgreSQL, Cowrie, spool and
+agent checkpoint volumes are independent of the PKI volumes.
+
+The agent checkpoint is persistent, so a redeploy resumes from the acknowledged
+Cowrie log offset (`AGENT_START_AT_END=true` in `compose.coolify.yaml`).
 
 Config that the containers read from the repository (Cowrie `cowrie.cfg`,
 detection `rules.toml`) is mounted read-only and changes on redeploy.
@@ -143,15 +141,22 @@ detection `rules.toml`) is mounted read-only and changes on redeploy.
 Push to the tracked branch and redeploy the resource in Coolify (or wire the
 webhook). Images that did not change are cached by the build layer cache.
 
-## Public exposure and firewall
+## Security and accepted MVP limitations
 
-- Allow TCP `22` and `23` in the VPS provider firewall so Cowrie can receive
-  public SSH and Telnet traffic. Keep TCP `22222` available for administration;
-  restrict it to trusted source IPs if practical.
-- Review the provider ToS: an open honeypot port will receive unsolicited
-  traffic, and some providers restrict honeypots or may null-route accounts.
-- **Dashboard access hardening** beyond the SSH tunnel (e.g. authenticated
-  tunnel, WireGuard, or application authentication) once the MVP validates.
+- The dashboard has no application authentication, roles, or user attribution.
+  It is a single-operator demonstration and must remain private behind an SSH
+  tunnel. Multi-analyst support belongs to a future enterprise-oriented effort.
+- Cowrie credentials are retained in plaintext in the Cowrie log, spool and
+  PostgreSQL as evidence. Anyone with access to the VPS, database or dashboard
+  tunnel can retrieve them. Event collections omit credential and raw evidence;
+  individual event details mask credentials until the operator explicitly
+  requests sensitive evidence. Never publish real event data or include it in
+  reports by default.
+- There are no automated backups or retention cleanup in this MVP. Persistent
+  volumes remain in normal operation; monitor VPS disk use, Cowrie logs and the
+  ingestion spool. Do not remove spool files while they may contain events not
+  yet committed to PostgreSQL.
+- Do not expose this dashboard through a public domain or attach it to Traefik.
 
 ## Out of scope / not to do
 

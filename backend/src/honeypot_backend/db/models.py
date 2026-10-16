@@ -170,6 +170,10 @@ class Alert(Base):
             "severity IN ('low', 'medium', 'high', 'critical')", name="ck_alerts_severity"
         ),
         CheckConstraint("occurred_to >= occurred_from", name="ck_alerts_window"),
+        CheckConstraint(
+            "status IN ('new', 'in_progress', 'resolved', 'false_positive')",
+            name="ck_alerts_status",
+        ),
         Index("ix_alerts_generated_at", "generated_at"),
         Index("ix_alerts_occurred_from", "occurred_from"),
         Index("ix_alerts_source_ip", "source_ip"),
@@ -192,6 +196,12 @@ class Alert(Base):
     occurred_to: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_count: Mapped[int] = mapped_column(Integer, nullable=False)
     evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="new")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    false_positive_reason: Mapped[str | None] = mapped_column(Text)
+    status_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -213,5 +223,9 @@ class Alert(Base):
             "occurred_to": self.occurred_to.isoformat() if self.occurred_to else None,
             "event_count": self.event_count,
             "evidence": self.evidence or {},
+            "status": self.status,
+            "notes": self.notes,
+            "false_positive_reason": self.false_positive_reason,
+            "status_updated_at": self.status_updated_at.isoformat() if self.status_updated_at else None,
             "generated_at": self.generated_at.isoformat() if self.generated_at else None,
         }

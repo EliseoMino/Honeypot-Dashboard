@@ -13,7 +13,10 @@ Flow of a batch:
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -108,11 +111,13 @@ def ingest_events(batch: IngestBatch, request: Request) -> IngestResponse:
 
     _metrics(request).record_batch(
         agent_id=batch.agent_id,
+        received=len(batch.events),
         source_event_ids=source_event_ids,
         event_types=event_types,
         normalized=len(normalized_records),
         rejected=len(rejected),
         duplicated=duplicates,
+        sequence=batch.sequence,
     )
 
     logger.info(
@@ -144,6 +149,30 @@ def ingest_stats(request: Request) -> dict[str, Any]:
 
     settings = _settings(request)
     replayer = getattr(request.app.state, "replayer", None)
+    spool_path = Path(settings.spool_dir)
+    cowrie_dir = Path(os.environ.get("COWRIE_DATA_DIR", "/cowrie/var"))
+    cowrie_log = cowrie_dir / "log" / "cowrie" / "cowrie.json"
+    spool_files = [path for path in spool_path.rglob("*") if path.is_file()] if spool_path.exists() else []
+    cowrie_log_dir = cowrie_dir / "log"
+    cowrie_files = (
+        [path for path in cowrie_log_dir.rglob("*") if path.is_file()]
+        if cowrie_log_dir.exists()
+        else []
+    )
+    try:
+        cowrie_log_stat = cowrie_log.stat()
+        log_state = {
+            "status": "ok",
+            "size_bytes": cowrie_log_stat.st_size,
+            "modified_at": datetime.fromtimestamp(cowrie_log_stat.st_mtime, UTC).isoformat(),
+        }
+    except OSError:
+        log_state = {"status": "unavailable", "size_bytes": None, "modified_at": None}
+    try:
+        disk = shutil.disk_usage(spool_path if spool_path.exists() else spool_path.parent)
+        disk_state = {"free_bytes": disk.free, "total_bytes": disk.total}
+    except OSError:
+        disk_state = {"free_bytes": None, "total_bytes": None}
     return {
         "spool_dir": str(settings.spool_dir),
         "max_batch_events": settings.max_batch_events,
@@ -151,4 +180,10 @@ def ingest_stats(request: Request) -> dict[str, Any]:
         "spool": _spool(request).stats(),
         "dedupe_window_size": len(_dedupe(request)),
         "replayer": replayer.stats() if replayer is not None else None,
+        "storage": {
+            "spool_bytes": sum(path.stat().st_size for path in spool_files),
+            "cowrie_data_bytes": sum(path.stat().st_size for path in cowrie_files),
+            "cowrie_log": log_state,
+            "filesystem": disk_state,
+        },
     }

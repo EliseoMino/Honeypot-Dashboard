@@ -22,6 +22,8 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/detections/rules"),
     ("GET", "/api/v1/alerts"),
     ("GET", "/api/v1/alerts/{alert_id}"),
+    ("PATCH", "/api/v1/alerts/{alert_id}/triage"),
+    ("GET", "/api/v1/alerts/{alert_id}/history"),
 }
 
 

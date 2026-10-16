@@ -731,6 +731,7 @@ class AlertFilters:
     session_id: str | None = None
     occurred_from: datetime | None = None
     occurred_to: datetime | None = None
+    status: str | None = None
 
     def conditions(self) -> list[Any]:
         clauses: list[Any] = []
@@ -749,6 +750,8 @@ class AlertFilters:
             clauses.append(Alert.occurred_from >= self.occurred_from)
         if self.occurred_to:
             clauses.append(Alert.occurred_to <= self.occurred_to)
+        if self.status:
+            clauses.append(Alert.status == self.status)
         return clauses
 
 

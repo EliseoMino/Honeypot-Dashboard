@@ -21,8 +21,11 @@ before anything can talk to it:
     exists so the backend only has to hold a key of its own and never the agent
     or nginx private key.
 
-The material is for local development only. It is generated outside the
-repository (``var/certs``) and must never be deployed.
+For host-based development, the material is generated outside the repository
+(``var/certs``). In Compose, ``init-runtime-certs.py`` runs this generator in a
+one-shot container and copies only each service's own leaf key plus the public
+CA certificate into role-specific volumes. The CA private key stays in a
+separate volume mounted only to that initializer.
 
 The script is idempotent. Without ``--force`` an existing pair is kept as long
 as it is still valid, so restarting the stack does not rotate the CA and
@@ -35,9 +38,9 @@ Usage::
     python scripts/generate-dev-certs.py --out var/certs
     python scripts/generate-dev-certs.py --out var/certs --force
 
-``compose.yaml`` runs the same script through the ``cert-init`` service, writing
-into the ``certs`` volume with ``--key-mode 0644`` so that the unprivileged
-uids in the backend, agent and dashboard containers can all read it.
+Compose does not mount the generator output into runtime containers. The
+initializer sets ownership and restrictive file modes when distributing the
+role-specific files.
 """
 
 from __future__ import annotations

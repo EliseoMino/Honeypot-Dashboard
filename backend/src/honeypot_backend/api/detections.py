@@ -27,6 +27,7 @@ from honeypot_backend.db.repository import (
 from honeypot_backend.db.session import get_session
 from honeypot_backend.detection import DetectionService, RulesUnavailable
 from honeypot_backend.detection.service import lookback_of
+from honeypot_backend.api.safe_output import safe_evidence
 
 router = APIRouter(prefix="/api/v1/detections", tags=["detections"])
 
@@ -151,7 +152,7 @@ async def run_detection(
         detections_found=len(found),
         detections_created=len(created),
         alerts_created=len(alerts),
-        items=[DetectionModel(**record) for record in created],
+        items=[DetectionModel(**{**record, "evidence": safe_evidence(record.get("evidence"))}) for record in created],
         alert_ids=[int(record["id"]) for record in alerts],
     )
 
@@ -184,7 +185,7 @@ async def list_detections(
         total=page.total,
         limit=page.limit,
         offset=page.offset,
-        items=[DetectionModel(**item) for item in page.items],
+        items=[DetectionModel(**{**item, "evidence": safe_evidence(item.get("evidence"))}) for item in page.items],
     )
 
 

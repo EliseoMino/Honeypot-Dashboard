@@ -35,13 +35,38 @@ class CountEntry(BaseModel):
     count: int
 
 
+class EventListItem(BaseModel):
+    """Safe event metadata for collection views; evidence stays in detail."""
+
+    event_id: str
+    source: str
+    source_event_id: str
+    event_type: str
+    event_category: EventCategory
+    occurred_at: datetime
+    received_at: datetime
+    sensor: str | None
+    session_id: str | None
+    source_ip: str | None
+    source_port: int | None
+    destination_ip: str | None
+    destination_port: int | None
+    protocol: str | None
+    username: str | None
+    outcome: EventOutcome | None
+
+
 class EventPage(BaseModel):
-    """A page of stored events."""
+    """A page of stored event metadata without evidence or credentials."""
 
     total: int = Field(description="Total number of events matching the filters")
     limit: int
     offset: int
-    items: list[NormalizedEvent]
+    items: list[EventListItem]
+
+
+class EventDetail(NormalizedEvent):
+    """Event detail with sensitive values masked unless explicitly requested."""
 
 
 class SeriesPoint(BaseModel):
@@ -223,16 +248,19 @@ async def list_events(
         total=page.total,
         limit=page.limit,
         offset=page.offset,
-        items=[NormalizedEvent.model_validate(item) for item in page.items],
+        items=[EventListItem.model_validate(item) for item in page.items],
     )
 
 
-@router.get("/{event_id}", response_model=NormalizedEvent, summary="Event detail")
+@router.get("/{event_id}", response_model=EventDetail, summary="Event detail")
 async def get_event(
     event_id: str,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> NormalizedEvent:
-    """Return the full detail of a single stored event."""
+    include_sensitive: Annotated[
+        bool, Query(description="Reveal captured credentials and raw Cowrie evidence")
+    ] = False,
+) -> EventDetail:
+    """Return event detail. Credentials and raw Cowrie evidence require explicit opt-in."""
 
     event = await EventRepository(session).get_event(event_id)
     if event is None:
@@ -240,4 +268,26 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"event '{event_id}' not found",
         )
-    return NormalizedEvent.model_validate(event)
+    result = NormalizedEvent.model_validate(event)
+    if not include_sensitive:
+        result.details = _mask_sensitive(result.details)
+        result.raw = {}
+    return EventDetail.model_validate(result)
+
+
+_SENSITIVE_KEYS = {
+    "password", "passwd", "passphrase", "secret", "token", "authorization", "credential",
+    "command_line", "input", "arguments", "url",
+}
+
+
+def _mask_sensitive(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]" if any(term in str(key).lower() for term in _SENSITIVE_KEYS)
+            else _mask_sensitive(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_sensitive(item) for item in value]
+    return value

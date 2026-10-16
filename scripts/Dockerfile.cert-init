@@ -9,6 +9,6 @@ FROM python:3.13-slim
 RUN pip install --no-cache-dir "cryptography==50.0.1"
 
 COPY scripts/generate-dev-certs.py /opt/generate-dev-certs.py
+COPY scripts/init-runtime-certs.py /opt/init-runtime-certs.py
 
-ENTRYPOINT ["python", "/opt/generate-dev-certs.py"]
-CMD ["--out", "/certs"]
+ENTRYPOINT ["python", "/opt/init-runtime-certs.py"]

@@ -20,9 +20,9 @@ import sys
 from urllib.parse import urlsplit
 
 URL = os.environ.get("HEALTHCHECK_URL", "https://127.0.0.1:8443/healthz")
-CA_CERT = os.environ.get("HEALTHCHECK_CA", "/certs/ca.crt")
-CLIENT_CERT = os.environ.get("HEALTHCHECK_CERT", "/certs/probe.crt")
-CLIENT_KEY = os.environ.get("HEALTHCHECK_KEY", "/certs/probe.key")
+CA_CERT = os.environ.get("HEALTHCHECK_CA", "/cert-backend/ca.crt")
+CLIENT_CERT = os.environ.get("HEALTHCHECK_CERT", "/cert-backend/probe.crt")
+CLIENT_KEY = os.environ.get("HEALTHCHECK_KEY", "/cert-backend/probe.key")
 TIMEOUT = float(os.environ.get("HEALTHCHECK_TIMEOUT", "5"))
 
 

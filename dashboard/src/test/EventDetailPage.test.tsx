@@ -35,7 +35,8 @@ describe("RF-07 detalle de un evento", () => {
     expect(screen.getByText("10.0.0.5:22")).toBeDefined();
     expect(screen.getByText("Atributos comunes")).toBeDefined();
     expect(screen.getByText("Información específica")).toBeDefined();
-    expect(screen.getByText("123456")).toBeDefined();
+    expect(screen.getByText("[REDACTED]")).toBeDefined();
+    expect(screen.queryByText("123456")).toBeNull();
   });
 
   it("enlaza el evento con su sesión y su IP de origen", async () => {
@@ -51,7 +52,11 @@ describe("RF-07 detalle de un evento", () => {
   });
 
   it("oculta el log original hasta que se pide", async () => {
-    mockBackend(() => ({ body: makeEvent() }));
+    mockBackend((url) => ({
+      body: url.searchParams.get("include_sensitive") === "true"
+        ? makeEvent({ details: { input: "root", password: "123456" }, raw: { eventid: "cowrie.login.failed", username: "root" } })
+        : makeEvent(),
+    }));
 
     renderDetail("e-1");
 
@@ -59,14 +64,18 @@ describe("RF-07 detalle de un evento", () => {
     expect(screen.queryByText(/"eventid": "cowrie.login.failed"/)).toBeNull();
 
     fireEvent.click(toggle);
-    expect(screen.getByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
+    expect(await screen.findByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
   });
 
   it("relaciona el log original con el evento normalizado en la misma vista", async () => {
     // RF-14 asks for the original log to be relatable to the normalized event.
     // Both live in one record, and the key that ties them is the Cowrie
     // eventid, shown next to the raw payload.
-    mockBackend(() => ({ body: makeEvent() }));
+    mockBackend((url) => ({
+      body: url.searchParams.get("include_sensitive") === "true"
+        ? makeEvent({ details: { input: "root", password: "123456" }, raw: { eventid: "cowrie.login.failed", username: "root" } })
+        : makeEvent(),
+    }));
 
     renderDetail("e-1");
 
@@ -81,8 +90,8 @@ describe("RF-07 detalle de un evento", () => {
     expect(screen.getByText("cowrie.login.failed")).toBeDefined();
 
     // The original side: the payload exactly as Cowrie emitted it.
-    expect(screen.getByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
-    expect(screen.getByText(/"username": "root"/)).toBeDefined();
+    expect(await screen.findByText(/"eventid": "cowrie.login.failed"/)).toBeDefined();
+    expect(await screen.findByText(/"username": "root"/)).toBeDefined();
   });
 
   it("informa cuando el evento no existe", async () => {

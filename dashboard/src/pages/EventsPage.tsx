@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { fetchEventPage, fetchSummary, MAX_LIMIT } from "../api/client";
-import type { NormalizedEvent, Order } from "../api/types";
+import type { EventListItem, Order } from "../api/types";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import {
   EMPTY_FILTERS,
@@ -216,7 +216,7 @@ export function EventsPage(): ReactNode {
   );
 }
 
-function EventRow({ event }: { event: NormalizedEvent }): ReactNode {
+function EventRow({ event }: { event: EventListItem }): ReactNode {
   return (
     <tr>
       <td className="table__time">{formatDateTime(event.occurred_at)}</td>

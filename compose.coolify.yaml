@@ -50,17 +50,17 @@ services:
         aliases:
           - postgres
 
-  # Generates the CA and the certificate pairs the transport needs. It runs once
-  # per `up` and is a no-op when valid material already exists, so restarts and
-  # redeploys do not rotate the CA out from under the services that already load
-  # it. The material lands in a named volume that survives redeploys.
+  # Generates role-specific certificates. The CA private key stays only in its
+  # private volume, mounted to this initializer and no runtime service.
   cert-init:
     build:
       context: .
       dockerfile: scripts/Dockerfile.cert-init
-    command: ["--out", "/certs", "--key-mode", "0644"]
     volumes:
-      - certs:/certs
+      - certs-ca-private:/ca-private
+      - certs-backend:/runtime/backend
+      - certs-agent:/runtime/agent
+      - certs-proxy:/runtime/proxy
     # Generating a local CA needs no network at all.
     network_mode: none
     restart: "no"
@@ -104,19 +104,21 @@ services:
       PORT: 8443
       # Inside the compose network the database host is the service name.
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      TLS_CERTFILE: /certs/server.crt
-      TLS_KEYFILE: /certs/server.key
-      TLS_CA_CERTS: /certs/ca.crt
+      TLS_CERTFILE: /cert-backend/server.crt
+      TLS_KEYFILE: /cert-backend/server.key
+      TLS_CA_CERTS: /cert-backend/ca.crt
       TLS_MIN_VERSION: TLSv1_3
       SPOOL_DIR: /var/lib/honeypot/spool
+      COWRIE_DATA_DIR: /cowrie/var
       DETECTION_RULES_PATH: /app/rules/rules.toml
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # The Dockerfile copies the sources into /app/src; that path wins over the
       # copy `pip install .` leaves in site-packages.
       PYTHONPATH: /app/src
     volumes:
-      - certs:/certs:ro
+      - certs-backend:/cert-backend:ro
       - spool:/var/lib/honeypot/spool
+      - cowrie-var:/cowrie/var:ro
       # The detection rules are read at startup, so edit them in the repository
       # and redeploy (or restart the backend) to apply a change.
       - ./infrastructure/detection:/app/rules:ro
@@ -155,9 +157,9 @@ services:
       AGENT_COWRIE_LOG_PATH: /cowrie/var/log/cowrie/cowrie.json
       AGENT_CHECKPOINT_PATH: /var/lib/honeypot-agent/checkpoint.json
       AGENT_BACKEND_URL: https://backend:8443/api/v1/ingest/events
-      AGENT_CA_CERTS: /certs/ca.crt
-      AGENT_CLIENT_CERT: /certs/agent.crt
-      AGENT_CLIENT_KEY: /certs/agent.key
+      AGENT_CA_CERTS: /cert-agent/ca.crt
+      AGENT_CLIENT_CERT: /cert-agent/agent.crt
+      AGENT_CLIENT_KEY: /cert-agent/agent.key
       AGENT_TLS_MIN_VERSION: TLSv1_3
       # Read only what is written after startup: the deployment history is not
       # replayed into the fresh database on every redeploy.
@@ -165,7 +167,7 @@ services:
       AGENT_LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PYTHONPATH: /app/src
     volumes:
-      - certs:/certs:ro
+      - certs-agent:/cert-agent:ro
       # Same named volume Cowrie writes to. Read only: the agent must never be
       # able to alter the honeypot log it is supposed to observe.
       - cowrie-var:/cowrie/var:ro
@@ -191,7 +193,7 @@ services:
       # through an SSH tunnel from a machine that trusts the user.
       - "127.0.0.1:${DASHBOARD_PORT:-3000}:8080"
     volumes:
-      - certs:/certs:ro
+      - certs-proxy:/cert-proxy:ro
     networks:
       edge:
         aliases:
@@ -215,5 +217,8 @@ volumes:
   pgdata:
   spool:
   agentstate:
-  certs:
+  certs-ca-private:
+  certs-backend:
+  certs-agent:
+  certs-proxy:
   cowrie-var:

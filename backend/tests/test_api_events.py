@@ -85,6 +85,7 @@ async def test_an_ingested_batch_can_be_queried(backend, cowrie_event) -> None:
         "auth.login_failed",
         "session.connect",
     ]
+    assert all("raw" not in item and "details" not in item for item in payload["items"])
 
 
 async def test_events_are_ordered_and_paged(backend, cowrie_event) -> None:
@@ -139,13 +140,20 @@ async def test_an_invalid_ip_is_rejected(backend, cowrie_event) -> None:
 async def test_the_detail_of_a_stored_event_is_available(backend, cowrie_event) -> None:
     await backend.ingest(cowrie_event)
     listing = (await backend.client.get("/api/v1/events")).json()
-    event_id = listing["items"][0]["event_id"]
+    event_id = (await backend.client.get("/api/v1/events", params={"event_type": "auth.login_failed"})).json()["items"][0]["event_id"]
 
     response = await backend.client.get(f"/api/v1/events/{event_id}")
 
     assert response.status_code == 200
     assert response.json()["event_id"] == event_id
-    assert response.json()["raw"]["eventid"] == "cowrie.command.success"
+    assert response.json()["raw"] == {}
+    assert response.json()["details"]["password"] == "[REDACTED]"
+
+    revealed = await backend.client.get(
+        f"/api/v1/events/{event_id}", params={"include_sensitive": "true"}
+    )
+    assert revealed.json()["details"]["password"] == "admin"
+    assert revealed.json()["raw"]["password"] == "admin"
 
 
 async def test_an_unknown_event_is_not_found(backend, cowrie_event) -> None:

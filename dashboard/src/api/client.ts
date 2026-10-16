@@ -8,9 +8,11 @@
 import type {
   Alert,
   AlertPage,
+  AlertStatusChange,
   CommandPage,
   EventPage,
   EventSummary,
+  IngestStats,
   NormalizedEvent,
   Order,
   SessionPage,
@@ -42,6 +44,7 @@ export interface AlertQuery {
   severity?: string;
   sourceIp?: string;
   sessionId?: string;
+  status?: string;
   limit: number;
   offset: number;
 }
@@ -77,12 +80,20 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function request<T>(
+  path: string,
+  signal?: AbortSignal,
+  init: Pick<RequestInit, "method" | "body"> = {},
+): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
       signal,
-      headers: { Accept: "application/json" },
+      ...init,
+      headers: {
+        Accept: "application/json",
+        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
     });
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
@@ -123,6 +134,10 @@ export function fetchSummary(signal?: AbortSignal): Promise<EventSummary> {
   return request<EventSummary>("/api/v1/events/summary", signal);
 }
 
+export function fetchIngestStats(signal?: AbortSignal): Promise<IngestStats> {
+  return request<IngestStats>("/api/v1/ingest/stats", signal);
+}
+
 export function fetchTimeSeries(
   bucket: TimeBucket,
   signal?: AbortSignal,
@@ -147,8 +162,15 @@ export function fetchEventPage(query: EventQuery, signal?: AbortSignal): Promise
   );
 }
 
-export function fetchEvent(eventId: string, signal?: AbortSignal): Promise<NormalizedEvent> {
-  return request<NormalizedEvent>(`/api/v1/events/${encodeURIComponent(eventId)}`, signal);
+export function fetchEvent(
+  eventId: string,
+  signal?: AbortSignal,
+  includeSensitive = false,
+): Promise<NormalizedEvent> {
+  return request<NormalizedEvent>(
+    `/api/v1/events/${encodeURIComponent(eventId)}${queryString({ include_sensitive: includeSensitive ? "true" : undefined })}`,
+    signal,
+  );
 }
 
 export function fetchAlertPage(query: AlertQuery, signal?: AbortSignal): Promise<AlertPage> {
@@ -159,6 +181,7 @@ export function fetchAlertPage(query: AlertQuery, signal?: AbortSignal): Promise
       severity: query.severity,
       source_ip: query.sourceIp,
       session_id: query.sessionId,
+      status: query.status,
       limit: query.limit,
       offset: query.offset,
     })}`,
@@ -166,8 +189,39 @@ export function fetchAlertPage(query: AlertQuery, signal?: AbortSignal): Promise
   );
 }
 
-export function fetchAlert(alertId: number, signal?: AbortSignal): Promise<Alert> {
-  return request<Alert>(`/api/v1/alerts/${alertId}`, signal);
+export function fetchAlert(
+  alertId: number,
+  signal?: AbortSignal,
+  includeSensitive = false,
+): Promise<Alert> {
+  return request<Alert>(
+    `/api/v1/alerts/${alertId}${queryString({ include_sensitive: includeSensitive ? "true" : undefined })}`,
+    signal,
+  );
+}
+
+export interface AlertTriageUpdate {
+  status: Alert["status"];
+  notes: string;
+  false_positive_reason?: string;
+}
+
+export function updateAlertTriage(
+  alertId: number,
+  update: AlertTriageUpdate,
+  signal?: AbortSignal,
+): Promise<Alert> {
+  return request<Alert>(`/api/v1/alerts/${alertId}/triage`, signal, {
+    method: "PATCH",
+    body: JSON.stringify(update),
+  });
+}
+
+export function fetchAlertHistory(
+  alertId: number,
+  signal?: AbortSignal,
+): Promise<AlertStatusChange[]> {
+  return request<AlertStatusChange[]>(`/api/v1/alerts/${alertId}/history`, signal);
 }
 
 export function fetchSessionPage(

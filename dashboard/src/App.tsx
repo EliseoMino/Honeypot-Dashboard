@@ -7,6 +7,7 @@ import { AlertsPage } from "./pages/AlertsPage";
 import { CommandsPage } from "./pages/CommandsPage";
 import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventsPage } from "./pages/EventsPage";
+import { IngestHealthPage } from "./pages/IngestHealthPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { SourceDetailPage } from "./pages/SourceDetailPage";
 import { SourcesPage } from "./pages/SourcesPage";
@@ -36,6 +37,9 @@ export function App(): ReactNode {
           <NavLink className="app__link" to="/sources">
             IPs
           </NavLink>
+          <NavLink className="app__link" to="/health">
+            Ingesta
+          </NavLink>
         </nav>
       </header>
 
@@ -46,6 +50,7 @@ export function App(): ReactNode {
           <Route path="/alerts/:alertId" element={<AlertDetailPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/:eventId" element={<EventDetailPage />} />
+          <Route path="/health" element={<IngestHealthPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/commands" element={<CommandsPage />} />
           <Route path="/sources" element={<SourcesPage />} />

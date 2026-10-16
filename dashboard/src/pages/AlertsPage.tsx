@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { fetchAlertPage, MAX_LIMIT } from "../api/client";
-import type { Alert } from "../api/types";
+import type { AlertPage } from "../api/types";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import {
   AlertFilters,
@@ -19,7 +19,7 @@ import { formatDateTime, formatNumber } from "../utils/format";
 
 const DEFAULT_LIMIT = 25;
 
-const FILTER_KEYS = ["severity", "alert_type", "rule_id", "source_ip", "session_id"] as const;
+const FILTER_KEYS = ["severity", "alert_type", "rule_id", "source_ip", "session_id", "status"] as const;
 
 function readFilters(params: URLSearchParams): AlertFilterValues {
   return {
@@ -28,6 +28,7 @@ function readFilters(params: URLSearchParams): AlertFilterValues {
     ruleId: params.get("rule_id") ?? "",
     sourceIp: params.get("source_ip") ?? "",
     sessionId: params.get("session_id") ?? "",
+    status: params.get("status") ?? "",
   };
 }
 
@@ -60,6 +61,7 @@ export function AlertsPage(): ReactNode {
           severity: filters.severity,
           sourceIp: filters.sourceIp,
           sessionId: filters.sessionId,
+          status: filters.status,
           limit,
           offset,
         },
@@ -91,6 +93,7 @@ export function AlertsPage(): ReactNode {
         ruleId: "rule_id",
         sourceIp: "source_ip",
         sessionId: "session_id",
+        status: "status",
       };
       for (const field of Object.keys(mapping) as (keyof AlertFilterValues)[]) {
         const value = applied[field].trim();
@@ -147,6 +150,7 @@ export function AlertsPage(): ReactNode {
                 <tr>
                   <th scope="col">Generada</th>
                   <th scope="col">Severidad</th>
+                  <th scope="col">Estado</th>
                   <th scope="col">Alerta</th>
                   <th scope="col">Regla</th>
                   <th scope="col">IP de origen</th>
@@ -193,13 +197,14 @@ export function AlertsPage(): ReactNode {
   );
 }
 
-function AlertRow({ alert }: { alert: Alert }): ReactNode {
+function AlertRow({ alert }: { alert: AlertPage["items"][number] }): ReactNode {
   return (
     <tr>
       <td className="table__time">{formatDateTime(alert.generated_at)}</td>
       <td>
         <span className={`badge badge--${alert.severity}`}>{alert.severity}</span>
       </td>
+      <td>{alert.status}</td>
       <td>
         <Link className="link" to={`/alerts/${alert.id}`}>
           {alert.title}

@@ -21,9 +21,10 @@ docker compose up -d --build
 
 Cuando los contenedores estén healthy, abrir <http://127.0.0.1:3000>.
 
-No hay paso manual de certificados: el servicio `cert-init` genera la CA de
-desarrollo y los pares que necesita el transporte TLS en un volumen de Docker la
-primera vez que arranca.
+No hay paso manual de certificados: `cert-init` genera la CA y distribuye
+volúmenes de certificados separados por servicio. La clave privada de la CA
+queda disponible solo para ese inicializador; backend, agente y proxy montan
+únicamente su propia clave privada y el certificado público de la CA.
 
 Para comprobar el estado:
 
@@ -133,9 +134,8 @@ desarrollo. En ese caso los certificados se generan a mano:
 python scripts/generate-dev-certs.py --out var/certs
 ```
 
-`--key-mode 0600` es el valor por defecto y sirve para el host. El compose usa
-`0644` porque varios contenedores sin privilegios tienen que leer el material
-desde un volumen compartido.
+`--key-mode 0600` es el valor por defecto y sirve para el host. Compose genera
+su propio conjunto con permisos de lectura limitados y volúmenes por servicio.
 
 `dashboard/vite.config.ts` apunta por defecto a nginx en `http://127.0.0.1:3000`
 y no al backend: el backend exige un certificado de cliente que un navegador no
@@ -222,8 +222,8 @@ docker compose up -d --force-recreate agent backend
 
 **El backend se reinicia en bucle con `TLS_CERTFILE does not exist`**
 
-Falta material en el volumen `certs`. `cert-init` lo genera solo cuando el
-volumen está vacío; si se borró a mano:
+Falta material en uno de los volúmenes `certs-*`. `cert-init` conserva la CA
+privada y vuelve a distribuir los certificados al iniciar:
 
 ```bash
 docker compose run --rm cert-init

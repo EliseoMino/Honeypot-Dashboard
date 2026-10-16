@@ -38,8 +38,8 @@ export function makeEvent(overrides: Partial<NormalizedEvent> = {}): NormalizedE
     protocol: "ssh",
     username: "root",
     outcome: "failure",
-    details: { input: "root", password: "123456" },
-    raw: { eventid: "cowrie.login.failed", username: "root" },
+    details: { input: "root", password: "[REDACTED]" },
+    raw: {},
     ...overrides,
   };
 }
@@ -80,6 +80,10 @@ export function makeAlert(overrides: Partial<Alert> = {}): Alert {
     event_count: 17,
     evidence: { threshold: 5, usernames: ["root"], event_ids: ["e-1", "e-2"] },
     generated_at: "2026-03-01T12:00:02Z",
+    status: "new",
+    notes: "",
+    false_positive_reason: null,
+    status_updated_at: "2026-03-01T12:00:02Z",
     ...overrides,
   };
 }

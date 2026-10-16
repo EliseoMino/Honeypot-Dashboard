@@ -13,6 +13,7 @@ EVENTS_MIGRATION = "0001_events.sql"
 EVENTS_VERSION = EVENTS_MIGRATION.removesuffix(".sql")
 DETECTIONS_MIGRATION = "0002_detections.sql"
 ALERTS_MIGRATION = "0003_alerts.sql"
+TRIAGE_MIGRATION = "0004_alert_triage.sql"
 
 #: Indexes RF-03 requires on the stored events.
 REQUIRED_INDEXES = {
@@ -130,6 +131,15 @@ def test_an_alert_is_raised_once_per_detection() -> None:
         "check (severity in ('low', 'medium', 'high', 'critical'))" in flat
     ), "an alert can only carry a severity of the ladder"
     assert "generated_at timestamptz not null default now()" in flat
+
+
+def test_alert_triage_migration_is_additive_and_records_status_changes() -> None:
+    flat = _flat(TRIAGE_MIGRATION)
+    assert "add column status text not null default 'new'" in flat
+    assert "add column notes text not null default ''" in flat
+    assert "create table alert_status_history" in flat
+    assert "on delete cascade" in flat
+    assert "drop table" not in flat
 
 
 def test_orm_indexes_match_the_migrations() -> None:

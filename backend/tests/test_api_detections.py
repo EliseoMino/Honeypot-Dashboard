@@ -173,10 +173,10 @@ async def test_every_rule_fires_and_raises_one_alert(backend) -> None:
 
     assert result["rules_evaluated"] == 3
     assert result["detections_found"] == 3
-    assert result["detections_created"] == 3
-    assert result["alerts_created"] == 3
-    assert len(result["alert_ids"]) == 3
-    assert {item["rule_id"] for item in result["items"]} == {
+    assert result["detections_created"] == 0
+    assert result["alerts_created"] == 0
+    detections = (await backend.client.get("/api/v1/detections")).json()["items"]
+    assert {item["rule_id"] for item in detections} == {
         "auth_bruteforce",
         "command_of_interest",
         "file_download",
@@ -198,7 +198,8 @@ async def test_the_auth_rule_counts_the_attempts_of_one_ip(backend) -> None:
 
     result = await backend.run()
 
-    auth = next(item for item in result["items"] if item["rule_id"] == "auth_bruteforce")
+    detections = (await backend.client.get("/api/v1/detections")).json()["items"]
+    auth = next(item for item in detections if item["rule_id"] == "auth_bruteforce")
     assert auth["event_count"] == 5
     assert auth["source_ip"] == "203.0.113.10"
     assert auth["occurred_from"].startswith("2026-03-01T12:00:00")
@@ -213,9 +214,10 @@ async def test_the_command_rule_reads_the_payload_of_a_shell(backend) -> None:
 
     result = await backend.run()
 
-    command = next(item for item in result["items"] if item["rule_id"] == "command_of_interest")
+    detections = (await backend.client.get("/api/v1/detections")).json()["items"]
+    command = next(item for item in detections if item["rule_id"] == "command_of_interest")
     assert command["evidence"]["matched_commands"] == ["wget"]
-    assert "wget" in command["evidence"]["command_line"]
+    assert "command_line" not in command["evidence"]
     assert command["source_ip"] == "203.0.113.10"
     assert command["session_id"] == "sess-cmd"
 
@@ -225,7 +227,8 @@ async def test_the_transfer_rule_keeps_what_the_honeypot_reported(backend) -> No
 
     result = await backend.run()
 
-    transfer = next(item for item in result["items"] if item["rule_id"] == "file_download")
+    detections = (await backend.client.get("/api/v1/detections")).json()["items"]
+    transfer = next(item for item in detections if item["rule_id"] == "file_download")
     assert transfer["evidence"]["url"] == "http://malicious.test/x.sh"
     assert transfer["evidence"]["outfile"] == "/tmp/x.sh"
     assert transfer["evidence"]["sha256"] == "0" * 64
@@ -251,7 +254,10 @@ async def test_an_alert_carries_the_activity_of_its_detection(backend) -> None:
     await backend.ingest(SUSPICIOUS)
 
     result = await backend.run()
-    detection = next(item for item in result["items"] if item["rule_id"] == "file_download")
+    detection = next(
+        item for item in (await backend.client.get("/api/v1/detections")).json()["items"]
+        if item["rule_id"] == "file_download"
+    )
 
     response = await backend.client.get("/api/v1/alerts")
     alert = next(
@@ -269,6 +275,7 @@ async def test_an_alert_carries_the_activity_of_its_detection(backend) -> None:
     assert alert["generated_at"]
     # The evidence identifies the event that triggered the detection.
     assert alert["evidence"]["event_ids"] == [detection["evidence"]["event_id"]]
+    assert "url" not in alert["evidence"]
 
 
 async def test_the_severity_of_an_alert_is_the_one_of_its_rule(backend) -> None:
@@ -288,17 +295,60 @@ async def test_the_severity_of_an_alert_is_the_one_of_its_rule(backend) -> None:
 
 async def test_one_alert_can_be_read_on_its_own(backend) -> None:
     await backend.ingest(SUSPICIOUS)
-    alert_id = (await backend.run())["alert_ids"][0]
+    await backend.run()
+    command_alert = next(
+        item for item in (await backend.client.get("/api/v1/alerts")).json()["items"]
+        if item["rule_id"] == "command_of_interest"
+    )
+    alert_id = command_alert["id"]
 
     response = await backend.client.get(f"/api/v1/alerts/{alert_id}")
 
     assert response.status_code == 200
     assert response.json()["id"] == alert_id
     assert response.json()["evidence"]
+    assert "command_line" not in response.json()["evidence"]
+    assert "url" not in response.json()["evidence"]
+    revealed = await backend.client.get(
+        f"/api/v1/alerts/{alert_id}", params={"include_sensitive": "true"}
+    )
+    assert revealed.json()["evidence"]
+    assert "wget" in revealed.json()["evidence"]["command_line"]
 
 
 async def test_an_unknown_alert_is_not_found(backend) -> None:
     assert (await backend.client.get("/api/v1/alerts/4242")).status_code == 404
+
+
+async def test_alert_triage_records_status_notes_and_false_positive_reason(backend) -> None:
+    await backend.ingest(SUSPICIOUS)
+    await backend.run()
+    alert_id = (await backend.client.get("/api/v1/alerts")).json()["items"][0]["id"]
+
+    invalid = await backend.client.patch(
+        f"/api/v1/alerts/{alert_id}/triage",
+        json={"status": "false_positive", "notes": "Review"},
+    )
+    assert invalid.status_code == 422
+
+    updated = await backend.client.patch(
+        f"/api/v1/alerts/{alert_id}/triage",
+        json={
+            "status": "false_positive",
+            "notes": "Expected scanner behavior",
+            "false_positive_reason": "Known research scanner",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "false_positive"
+    assert updated.json()["notes"] == "Expected scanner behavior"
+    assert updated.json()["false_positive_reason"] == "Known research scanner"
+    assert (await backend.client.get("/api/v1/alerts?status=false_positive")).json()["total"] == 1
+
+    history = await backend.client.get(f"/api/v1/alerts/{alert_id}/history")
+    assert history.status_code == 200
+    assert history.json()[0]["new_status"] == "false_positive"
+    assert history.json()[0]["note"] == "Expected scanner behavior"
 
 
 async def test_alerts_can_be_filtered(backend) -> None:
