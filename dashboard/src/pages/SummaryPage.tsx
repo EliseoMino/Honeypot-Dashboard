@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { fetchSummary, fetchTimeSeries } from "../api/client";
 import type { TimeBucket } from "../api/types";
@@ -49,15 +50,18 @@ export function SummaryPage(): ReactNode {
   }
 
   const data = summary.data;
+  const hasActivity = data.total_events > 0;
 
   return (
-    <div className="page">
-      <header className="page__header">
-        <div>
-          <h1>Resumen</h1>
+    <div className="page summary-page">
+      <header className="page__header summary-header">
+        <div className="summary-header__copy">
+          <p className="summary-eyebrow">CENTRO DE OPERACIONES</p>
+          <h1>Resumen de actividad</h1>
           <p className="page__subtitle">
-            Actividad registrada entre {formatDateTime(data.first_event_at)} y{" "}
-            {formatDateTime(data.last_event_at)}
+            {hasActivity
+              ? `Datos desde ${formatDateTime(data.first_event_at)} hasta ${formatDateTime(data.last_event_at)}`
+              : "Todavía no se recibieron eventos de Cowrie."}
           </p>
         </div>
         <RefreshControls
@@ -68,68 +72,96 @@ export function SummaryPage(): ReactNode {
         />
       </header>
 
-      <div className="metrics">
-        <MetricCard label="Eventos totales" value={data.total_events} />
-        <MetricCard label="IPs únicas" value={data.unique_source_ips} />
-        <MetricCard label="Sesiones" value={data.unique_sessions} />
-        <MetricCard
-          label="Intentos de autenticación"
-          value={data.auth_attempts}
-          hint="Eventos de categoría authentication"
-        />
-        <MetricCard
-          label="Comandos registrados"
-          value={data.commands}
-          hint="Eventos de categoría command"
-        />
-        <MetricCard
-          label="Alertas generadas"
-          value={data.alerts}
-          hint={data.alerts === 0 ? "Ninguna regla ha detectado actividad" : undefined}
-        />
-      </div>
+      <section className="summary-section" aria-labelledby="summary-metrics-title">
+        <div className="summary-section__heading">
+          <div>
+            <p className="summary-eyebrow">VISTA GENERAL</p>
+            <h2 id="summary-metrics-title">Actividad registrada</h2>
+          </div>
+          <span className="summary-period">Acumulado del periodo mostrado</span>
+        </div>
+        <div className="metrics summary-metrics">
+          <MetricCard label="Eventos totales" value={data.total_events} to="/events" />
+          <MetricCard label="IPs únicas" value={data.unique_source_ips} to="/sources" />
+          <MetricCard label="Sesiones" value={data.unique_sessions} to="/sessions" />
+          <MetricCard
+            label="Intentos de autenticación"
+            value={data.auth_attempts}
+            hint="Abrir eventos de autenticación"
+            to="/events?event_category=authentication"
+          />
+          <MetricCard
+            label="Comandos registrados"
+            value={data.commands}
+            hint="Abrir explorador de comandos"
+            to="/commands"
+          />
+          <MetricCard
+            label="Alertas generadas"
+            value={data.alerts}
+            hint={data.alerts === 0 ? "Ninguna regla ha detectado actividad" : "Revisar alertas"}
+            to="/alerts"
+          />
+        </div>
+      </section>
 
-      {data.total_events === 0 ? (
+      {!hasActivity ? (
         <EmptyState>
-          Todavía no hay eventos almacenados. Cuando el honeypot genere actividad aparecerá aquí.
+          La ingesta está lista para recibir actividad. Cuando Cowrie genere eventos, vas a poder revisar aquí las tendencias y los indicadores.
         </EmptyState>
       ) : (
         <>
-          <div className="chart-controls">
-            <div className="filters__field">
-              <label htmlFor="summary-bucket">Periodo del gráfico</label>
-              <select
-                id="summary-bucket"
-                value={bucket}
-                onChange={(event) => setBucket(event.target.value as TimeBucket)}
-              >
-                {BUCKET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+          <section className="summary-section" aria-labelledby="summary-trend-title">
+            <div className="summary-section__heading summary-section__heading--chart">
+              <div>
+                <p className="summary-eyebrow">TENDENCIA</p>
+                <h2 id="summary-trend-title">Evolución de la actividad</h2>
+                <p className="page__subtitle">Autenticaciones y comandos a lo largo del tiempo.</p>
+              </div>
+              <div className="filters__field summary-bucket">
+                <label htmlFor="summary-bucket">Intervalo</label>
+                <select
+                  id="summary-bucket"
+                  value={bucket}
+                  onChange={(event) => setBucket(event.target.value as TimeBucket)}
+                >
+                  {BUCKET_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
 
-          {series.error !== null ? (
-            <ErrorBanner message={series.error} onRetry={series.reload} />
-          ) : series.data === null ? (
-            <Loading label="Consultando la actividad" />
-          ) : (
-            <TimeSeriesChart
-              points={series.data.points}
-              bucket={series.data.bucket}
-              title="Evolución de la actividad"
-            />
-          )}
+            {series.error !== null ? (
+              <ErrorBanner message={series.error} onRetry={series.reload} />
+            ) : series.data === null ? (
+              <Loading label="Consultando la actividad" />
+            ) : (
+              <TimeSeriesChart
+                points={series.data.points}
+                bucket={series.data.bucket}
+                title="Eventos por intervalo"
+              />
+            )}
+          </section>
 
-          <div className="panels">
-            <BreakdownList title="Tipos de evento más frecuentes" entries={data.top_event_types} />
-            <BreakdownList title="Por categoría" entries={data.by_category} />
-            <BreakdownList title="Por resultado" entries={data.by_outcome} />
-            <BreakdownList title="Por protocolo" entries={data.by_protocol} />
-          </div>
+          <section className="summary-section" aria-labelledby="summary-breakdown-title">
+            <div className="summary-section__heading">
+              <div>
+                <p className="summary-eyebrow">DESGLOSE</p>
+                <h2 id="summary-breakdown-title">Qué actividad se observó</h2>
+              </div>
+              <Link className="summary-section__link" to="/events">Explorar eventos →</Link>
+            </div>
+            <div className="panels summary-breakdowns">
+              <BreakdownList title="Tipos de evento más frecuentes" entries={data.top_event_types} />
+              <BreakdownList title="Por categoría" entries={data.by_category} />
+              <BreakdownList title="Por resultado" entries={data.by_outcome} />
+              <BreakdownList title="Por protocolo" entries={data.by_protocol} />
+            </div>
+          </section>
         </>
       )}
 
