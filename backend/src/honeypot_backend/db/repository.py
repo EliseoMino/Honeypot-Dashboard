@@ -453,7 +453,6 @@ class EventRepository:
             Event.username.label("username"),
             Event.outcome.label("outcome"),
             Event.details["command"].astext.label("command"),
-            Event.details["command_line"].astext.label("command_line"),
         )
         total = int(await self._session.scalar(select(func.count()).where(*conditions)) or 0)
         rows = (
@@ -555,7 +554,9 @@ class EventRepository:
             "username": row.username,
             "outcome": row.outcome,
             "command": row.command,
-            "command_line": row.command_line or row.command,
+            # Command arguments can include credentials or tokens. The API
+            # list links to the event detail for deliberate evidence review.
+            "command_line": None,
         }
 
     @staticmethod

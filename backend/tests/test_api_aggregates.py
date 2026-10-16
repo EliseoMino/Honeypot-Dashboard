@@ -183,7 +183,7 @@ async def test_commands_report_the_text_time_address_and_session(backend, cowrie
     assert payload["total"] == 1
     command = payload["items"][0]
     assert command["command"] == "wget"
-    assert command["command_line"] == "wget http://example.com/x.sh"
+    assert command["command_line"] is None
     assert command["occurred_at"] == "2026-03-01T12:01:00+00:00"
     assert command["source_ip"] == "198.51.100.4"
     assert command["session_id"] == "sess-2"
@@ -212,14 +212,15 @@ async def test_commands_can_be_filtered_by_session_and_free_text(backend, cowrie
     assert by_text.json()["total"] == 1
 
 
-async def test_commands_fall_back_to_the_line_when_no_command_was_parsed(
+async def test_commands_without_a_parsed_name_do_not_expose_the_command_line(
     backend, cowrie_event
 ) -> None:
     await backend.ingest(cowrie_event)
 
     response = await backend.client.get("/api/v1/commands", params={"q": "wget"})
 
-    assert response.json()["items"][0]["command_line"].endswith("x.sh")
+    assert response.json()["items"][0]["command"] is None
+    assert response.json()["items"][0]["command_line"] is None
 
 
 # RF-10

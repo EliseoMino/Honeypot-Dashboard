@@ -185,7 +185,7 @@ export function makeCommand(overrides: Partial<CommandRecord> = {}): CommandReco
     username: "root",
     outcome: null,
     command: "wget",
-    command_line: "wget http://example.com/x.sh",
+    command_line: null,
     ...overrides,
   };
 }
@@ -203,7 +203,7 @@ export function makeCommandPage(overrides: Partial<CommandPage> = {}): CommandPa
         occurred_at: "2026-03-01T12:02:00Z",
         outcome: "failure",
         command: "totally-not-a-command",
-        command_line: "totally-not-a-command --now",
+        command_line: null,
       }),
     ],
     ...overrides,

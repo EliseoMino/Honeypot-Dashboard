@@ -121,11 +121,12 @@ describe("RF-09 consulta de comandos", () => {
 
     renderAt(<CommandsPage />, "/commands");
 
-    const line = await screen.findByText("wget http://example.com/x.sh");
-    const table = line.closest("table") as HTMLTableElement;
-    // The parsed command and the full line are separate columns.
+    const table = (await screen.findByRole("table")) as HTMLTableElement;
+    // The parsed command remains visible while the full line stays in event detail.
     expect(within(table).getByText("wget")).toBeDefined();
-    expect(within(table).getByText("totally-not-a-command --now")).toBeDefined();
+    expect(within(table).queryByText("wget http://example.com/x.sh")).toBeNull();
+    expect(within(table).queryByText("totally-not-a-command --now")).toBeNull();
+    expect(within(table).getAllByRole("link", { name: "Ver evento" })).toHaveLength(2);
     // Only the failed command carries an outcome badge.
     expect(within(table).getByText("fallida")).toBeDefined();
     expect(within(table).queryByText("exitosa")).toBeNull();
@@ -138,7 +139,8 @@ describe("RF-09 consulta de comandos", () => {
 
     renderAt(<CommandsPage />, "/commands");
 
-    const link = await screen.findByRole("link", { name: "wget http://example.com/x.sh" });
+    const links = await screen.findAllByRole("link", { name: "Ver evento" });
+    const link = links[0]!;
     expect(link.getAttribute("href")).toBe("/events/e-1");
   });
 

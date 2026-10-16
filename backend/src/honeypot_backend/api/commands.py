@@ -81,5 +81,8 @@ async def list_commands(
         total=page["total"],
         limit=page["limit"],
         offset=page["offset"],
-        items=[CommandRecord(**with_country(request, item)) for item in page["items"]],
+        items=[
+            CommandRecord(**with_country(request, {**item, "command_line": None}))
+            for item in page["items"]
+        ],
     )

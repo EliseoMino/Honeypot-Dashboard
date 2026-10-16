@@ -276,11 +276,7 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"event '{event_id}' not found",
         )
-    result = NormalizedEvent.model_validate(event)
-    if not include_sensitive:
-        result.details = _mask_sensitive(result.details)
-        result.raw = {}
-    payload = result.model_dump()
+    payload = _event_detail_payload(event, include_sensitive=include_sensitive)
     payload.update(with_country(request, payload))
     return EventDetail.model_validate(payload)
 
@@ -289,6 +285,16 @@ _SENSITIVE_KEYS = {
     "password", "passwd", "passphrase", "secret", "token", "authorization", "credential",
     "command_line", "input", "arguments", "url",
 }
+
+
+def _event_detail_payload(event: dict[str, Any], *, include_sensitive: bool) -> dict[str, Any]:
+    """Prepare event detail without mutating the frozen normalized model."""
+
+    payload = NormalizedEvent.model_validate(event).model_dump()
+    if not include_sensitive:
+        payload["details"] = _mask_sensitive(payload["details"])
+        payload["raw"] = {}
+    return payload
 
 
 def _mask_sensitive(value: Any) -> Any:

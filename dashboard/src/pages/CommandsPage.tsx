@@ -156,7 +156,7 @@ export function CommandsPage(): ReactNode {
                 <tr>
                   <th scope="col">Fecha</th>
                   <th scope="col">Comando</th>
-                  <th scope="col">Línea completa</th>
+                  <th scope="col">Evidencia</th>
                   <th scope="col">Resultado</th>
                   <th scope="col">IP de origen</th>
                   <th scope="col">Sesión</th>
@@ -208,7 +208,7 @@ function CommandRow({ command }: { command: CommandRecord }): ReactNode {
       <td className="table__mono">{command.command ?? "—"}</td>
       <td className="table__command">
         <Link className="link" to={`/events/${command.event_id}`}>
-          {command.command_line ?? "—"}
+          Ver evento
         </Link>
       </td>
       <td>{badge === null ? "—" : <span className={`badge ${badge.className}`}>{badge.label}</span>}</td>
