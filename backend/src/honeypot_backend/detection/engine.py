@@ -235,6 +235,7 @@ class AuthThresholdRuleEvaluator:
                     occurred_to=burst[-1].occurred_at,
                     event_count=len(ids),
                     evidence={
+                        "attack_mapping": [mapping.model_dump(mode="json") for mapping in self.spec.attack],
                         "event_ids": ids[: self.spec.max_evidence_events],
                         "event_ids_truncated": truncated,
                         "threshold": self.spec.threshold,
@@ -294,6 +295,7 @@ class CommandOfInterestRuleEvaluator:
                     occurred_to=row.occurred_at,
                     event_count=1,
                     evidence={
+                        "attack_mapping": [mapping.model_dump(mode="json") for mapping in self.spec.attack],
                         "event_ids": [row.event_id],
                         "event_id": row.event_id,
                         "event_type": row.event_type,
@@ -341,6 +343,7 @@ class FileTransferRuleEvaluator:
                     occurred_to=row.occurred_at,
                     event_count=1,
                     evidence={
+                        "attack_mapping": [mapping.model_dump(mode="json") for mapping in self.spec.attack],
                         "event_ids": [row.event_id],
                         "event_id": row.event_id,
                         "event_type": row.event_type,

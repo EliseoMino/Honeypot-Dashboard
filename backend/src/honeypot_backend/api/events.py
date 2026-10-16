@@ -12,7 +12,7 @@ import ipaddress
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from honeypot_backend.db.repository import (
     EventFilters,
     EventRepository,
 )
+from honeypot_backend.api.geo import with_country
 from honeypot_backend.db.session import get_session
 from honeypot_backend.normalization.events import EventCategory, EventOutcome, NormalizedEvent
 
@@ -48,6 +49,8 @@ class EventListItem(BaseModel):
     sensor: str | None
     session_id: str | None
     source_ip: str | None
+    country_code: str | None = None
+    country_name: str | None = None
     source_port: int | None
     destination_ip: str | None
     destination_port: int | None
@@ -67,6 +70,9 @@ class EventPage(BaseModel):
 
 class EventDetail(NormalizedEvent):
     """Event detail with sensitive values masked unless explicitly requested."""
+
+    country_code: str | None = None
+    country_name: str | None = None
 
 
 class SeriesPoint(BaseModel):
@@ -235,6 +241,7 @@ async def event_timeseries(
 # swallowed by the {event_id} parameter.
 @router.get("", response_model=EventPage, summary="List stored events")
 async def list_events(
+    request: Request,
     filters: Annotated[EventFilters, Depends(_event_filters)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -248,13 +255,14 @@ async def list_events(
         total=page.total,
         limit=page.limit,
         offset=page.offset,
-        items=[EventListItem.model_validate(item) for item in page.items],
+        items=[EventListItem.model_validate(with_country(request, item)) for item in page.items],
     )
 
 
 @router.get("/{event_id}", response_model=EventDetail, summary="Event detail")
 async def get_event(
     event_id: str,
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     include_sensitive: Annotated[
         bool, Query(description="Reveal captured credentials and raw Cowrie evidence")
@@ -272,7 +280,9 @@ async def get_event(
     if not include_sensitive:
         result.details = _mask_sensitive(result.details)
         result.raw = {}
-    return EventDetail.model_validate(result)
+    payload = result.model_dump()
+    payload.update(with_country(request, payload))
+    return EventDetail.model_validate(payload)
 
 
 _SENSITIVE_KEYS = {

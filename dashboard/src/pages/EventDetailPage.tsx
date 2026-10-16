@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { fetchEvent } from "../api/client";
 import { ErrorBanner, Loading } from "../components/Feedback";
+import { IpCountry } from "../components/IpCountry";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime, formatEndpoint } from "../utils/format";
 
@@ -64,7 +65,7 @@ export function EventDetailPage(): ReactNode {
                 "—"
               ) : (
                 <Link className="link" to={`/events?source_ip=${encodeURIComponent(data.source_ip)}`}>
-                  {data.source_ip}
+                  {data.source_ip}<IpCountry countryCode={data.country_code} countryName={data.country_name} />
                 </Link>
               )}
             </Attribute>

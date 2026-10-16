@@ -23,7 +23,7 @@ export function IngestHealthPage(): ReactNode {
     return <div className="page"><ErrorBanner message={resource.error} onRetry={resource.reload} /></div>;
   }
   if (resource.data === null) return <Loading label="Consultando la ingesta" />;
-  const { metrics, replayer, storage } = resource.data;
+  const { metrics, replayer, storage, agents } = resource.data;
   return (
     <div className="page">
       <header className="page__header">
@@ -35,11 +35,33 @@ export function IngestHealthPage(): ReactNode {
         <Metric label="Eventos recibidos" value={formatNumber(metrics.events_received)} />
         <Metric label="Eventos rechazados" value={formatNumber(metrics.events_rejected)} />
         <Metric label="Saltos de secuencia" value={formatNumber(metrics.sequence_gaps)} />
+        <Metric label="Agente" value={agents.length === 0 ? "Sin heartbeat" : agents.every((agent) => agent.status === "active") ? "Activo" : "Atrasado"} />
+        <Metric label="Último heartbeat" value={agents.length ? formatDateTime(agents.map((agent) => agent.last_heartbeat_at).sort().at(-1)) : "Nunca"} />
         <Metric label="Spool persistido" value={bytes(storage.spool_bytes)} />
         <Metric label="Datos de Cowrie" value={bytes(storage.cowrie_data_bytes)} />
         <Metric label="Espacio libre" value={bytes(storage.filesystem.free_bytes)} />
         <Metric label="Log Cowrie actualizado" value={formatDateTime(storage.cowrie_log.modified_at)} />
       </div>
+      {agents.length > 0 ? (
+        <section className="panel">
+          <h2 className="panel__title">Agentes de ingesta</h2>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead><tr><th>Agente</th><th>Estado</th><th>Último heartbeat</th><th>Offset / tamaño log</th><th>Pendientes</th><th>Malformadas</th><th>Fallos de entrega</th><th>Rotaciones / truncamientos</th></tr></thead>
+              <tbody>{agents.map((agent) => <tr key={agent.agent_id}>
+                <td className="table__mono">{agent.agent_id}</td>
+                <td><span className={`badge badge--${agent.status === "active" ? "low" : "high"}`}>{agent.status === "active" ? "activo" : "sin señal reciente"}</span></td>
+                <td>{formatDateTime(agent.last_heartbeat_at)} ({agent.age_seconds} s)</td>
+                <td>{bytes(agent.log_offset)} / {bytes(agent.log_size_bytes)}</td>
+                <td>{formatNumber(agent.pending_records)}</td>
+                <td>{formatNumber(agent.malformed_lines)}</td>
+                <td>{formatNumber(agent.delivery_failures)}</td>
+                <td>{formatNumber(agent.rotations)} / {formatNumber(agent.truncations)}{agent.truncations > 0 ? <span className="badge badge--high"> posible pérdida</span> : null}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       <section className="panel">
         <h2 className="panel__title">Estado del replayer</h2>
         {replayer === null ? <p>No hay replayer configurado.</p> : (
@@ -51,7 +73,7 @@ export function IngestHealthPage(): ReactNode {
             <Row label="Fallos de detección automática">{formatNumber(replayer.auto_detection_failures)}</Row>
           </dl>
         )}
-        <p className="page__subtitle">El último lote refleja actividad Cowrie, no un heartbeat del agente; un honeypot inactivo puede no enviar lotes. Los contadores de proceso vuelven a cero al reiniciar el backend. No se borran automáticamente logs ni eventos pendientes.</p>
+        <p className="page__subtitle">El heartbeat confirma que el agente se comunica con el backend; no garantiza que Cowrie genere eventos. Las métricas de ingesta se conservan en el volumen persistente del spool. No se borran automáticamente logs ni eventos pendientes.</p>
       </section>
     </div>
   );

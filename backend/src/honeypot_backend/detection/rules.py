@@ -90,6 +90,18 @@ class RuleConfigError(ValueError):
     """Raised when the rule configuration cannot be used."""
 
 
+class AttackMapping(BaseModel):
+    """A rule-author justified ATT&CK technique association."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tactic_id: str = Field(pattern=r"^TA[0-9]{4}$")
+    tactic_name: str = Field(min_length=1, max_length=100)
+    technique_id: str = Field(pattern=r"^T[0-9]{4}(\.[0-9]{3})?$")
+    technique_name: str = Field(min_length=1, max_length=160)
+    rationale: str = Field(min_length=10, max_length=500)
+
+
 class _Base(BaseModel):
     """Common fields of every rule."""
 
@@ -100,6 +112,7 @@ class _Base(BaseModel):
     description: str = Field(default="", max_length=1000)
     #: The level the alert raised for a match of this rule gets (RF-12).
     severity: Severity = DEFAULT_SEVERITY
+    attack: tuple[AttackMapping, ...] = ()
 
 
 class AuthThresholdRule(_Base):

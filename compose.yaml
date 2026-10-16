@@ -115,6 +115,7 @@ services:
       TLS_MIN_VERSION: TLSv1_3
       SPOOL_DIR: /var/lib/honeypot/spool
       COWRIE_DATA_DIR: /cowrie/var
+      GEOIP_DB_PATH: /geoip/GeoLite2-Country.mmdb
       DETECTION_RULES_PATH: /app/rules/rules.toml
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Watch mode runs the sources that are synced into /app/src, which is where
@@ -128,6 +129,7 @@ services:
       # The detection rules are read at startup, so restart the backend after
       # editing rules.toml.
       - ./infrastructure/detection:/app/rules:ro
+      - ./infrastructure/geoip:/geoip:ro
     # No published port on purpose: the dashboard is the only client and it
     # authenticates with a certificate.
     expose:

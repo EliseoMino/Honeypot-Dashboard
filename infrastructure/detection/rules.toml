@@ -40,6 +40,9 @@ window_seconds = 300
 severity = "high"
 event_types = ["auth.login_failed", "auth.login_success"]
 max_evidence_events = 50
+attack = [
+  { tactic_id = "TA0006", tactic_name = "Credential Access", technique_id = "T1110.001", technique_name = "Password Guessing", rationale = "Repeated authentication attempts from one IP fit password guessing, but honeypot observations do not establish that any real account was targeted." },
+]
 
 # ---------------------------------------------------------------------------
 # 2. Execution of a command of interest.
@@ -108,3 +111,6 @@ usually arrives.
 """
 severity = "medium"
 event_types = ["transfer.download", "transfer.download_failed", "transfer.upload"]
+attack = [
+  { tactic_id = "TA0011", tactic_name = "Command and Control", technique_id = "T1105", technique_name = "Ingress Tool Transfer", rationale = "Cowrie records an explicit file download or transfer attempt. This maps the observed transfer behavior only; it does not assert that a payload executed." },
+]

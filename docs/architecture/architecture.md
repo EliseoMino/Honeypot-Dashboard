@@ -212,6 +212,59 @@ which `evidence.event_ids` identifies the events that triggered it.
 The MVP asks for persistence and consultation only, so nothing is sent anywhere:
 no email, no Discord, no Telegram.
 
+## Session investigation (RF-08)
+
+`GET /api/v1/sessions/{session_id}` returns the derived session summary, a
+chronological page of safe event metadata, and related alert summaries. The
+dashboard links from the session list into this timeline. Event payloads,
+credential fields and raw Cowrie JSON are deliberately omitted from the
+timeline; an analyst opens an individual event to use its explicit sensitive
+evidence control.
+
+## Ingestion health (RF-01)
+
+The agent sends a periodic heartbeat over its existing TLS 1.3 mutual TLS
+connection. It reports its checkpoint, current log offset and size, pending
+records, delivery failures, malformed lines, rotations and truncations. The
+backend atomically stores ingestion counters and latest agent state in
+`ingest-health.json` inside the already persistent spool volume. Heartbeat age
+is reported as active up to 90 seconds and stale after that. A stale agent is
+evidence of a transport/agent problem; no heartbeat from an older deployment
+means unknown. Cowrie can be quiet while the agent remains healthy.
+
+This is operational monitoring, not a guarantee that every source log line was
+created or retained. A Cowrie file truncation is reported as a risk signal; the
+application does not delete or rotate the source log or spool automatically.
+
+## Exports (RF-16)
+
+`/api/v1/exports/events.csv|json` and `/api/v1/exports/alerts.csv|json` apply
+the filters from their corresponding views and refuse exports above 10,000
+rows. `/api/v1/exports/report.json` contains aggregate counters and the busiest
+source addresses. These formats use allowlisted fields: no credentials, raw
+Cowrie payload, full command line, operator notes or false-positive reason.
+CSV values that could be interpreted as spreadsheet formulas are prefixed
+with an apostrophe. Sensitive evidence remains available only through the
+existing deliberate event or alert detail controls.
+
+## Country context and ATT&CK (RF-17)
+
+An optional MaxMind GeoLite2 Country MMDB is read locally by the backend. The
+`GEOIP_DB_PATH` environment variable selects it; an absent or unreadable file
+leaves country fields null and does not affect ingest or API availability. IPs
+are never sent to an online lookup service. The country code/name are response
+metadata, not persisted with events, so replacing the database refreshes
+context without a migration. Obtain and update the database under MaxMind's
+current terms; do not commit the `.mmdb` file.
+
+ATT&CK mappings are explicit rule configuration in
+`infrastructure/detection/rules.toml`. A match stores the rule's mapping and
+its rationale with the detection evidence; the alert detail links to the
+technique. Current mappings are limited to repeated authentication attempts
+and explicit file transfer attempts. Command invocation alone is not mapped to
+a technique. These associations describe observed behavior and are not actor
+attribution or proof of execution beyond Cowrie's simulation.
+
 ## Tests
 
 The backend tests in `/backend/tests` run without PostgreSQL: everything that

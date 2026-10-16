@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from honeypot_backend.db.repository import (
     EventRepository,
 )
 from honeypot_backend.db.session import get_session
+from honeypot_backend.api.geo import with_country
 
 router = APIRouter(prefix="/api/v1/commands", tags=["commands"])
 
@@ -34,6 +35,8 @@ class CommandRecord(BaseModel):
     event_type: str
     occurred_at: str | None
     source_ip: str | None
+    country_code: str | None = None
+    country_name: str | None = None
     session_id: str | None
     username: str | None
     outcome: str | None
@@ -65,6 +68,7 @@ async def _command_filters(
 
 @router.get("", response_model=CommandPage, summary="List the recorded commands")
 async def list_commands(
+    request: Request,
     filters: Annotated[EventFilters, Depends(_command_filters)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -77,5 +81,5 @@ async def list_commands(
         total=page["total"],
         limit=page["limit"],
         offset=page["offset"],
-        items=[CommandRecord(**item) for item in page["items"]],
+        items=[CommandRecord(**with_country(request, item)) for item in page["items"]],
     )

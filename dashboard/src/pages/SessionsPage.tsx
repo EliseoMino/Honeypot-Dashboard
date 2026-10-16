@@ -11,6 +11,7 @@ import {
 } from "../components/AggregateFilters";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import { Pagination } from "../components/Pagination";
+import { IpCountry } from "../components/IpCountry";
 import { RefreshControls } from "../components/RefreshControls";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useRefreshPreference } from "../hooks/useRefreshPreference";
@@ -200,7 +201,7 @@ function SessionRow({ session }: { session: SessionSummary }): ReactNode {
   return (
     <tr>
       <td className="table__mono">
-        <Link className="link" to={`/events?${eventQuery}`}>
+        <Link className="link" to={`/sessions/${encodeURIComponent(session.session_id)}`}>
           {session.session_id}
         </Link>
       </td>
@@ -209,7 +210,7 @@ function SessionRow({ session }: { session: SessionSummary }): ReactNode {
           "—"
         ) : (
           <Link className="link" to={`/sources/${encodeURIComponent(session.source_ip)}`}>
-            {session.source_ip}
+            {session.source_ip}<IpCountry countryCode={session.country_code} countryName={session.country_name} />
           </Link>
         )}
       </td>

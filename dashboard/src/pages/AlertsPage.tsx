@@ -11,6 +11,8 @@ import {
   type AlertFilterValues,
 } from "../components/AlertFilters";
 import { Pagination } from "../components/Pagination";
+import { ExportLinks } from "../components/ExportLinks";
+import { IpCountry } from "../components/IpCountry";
 import { RefreshControls } from "../components/RefreshControls";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useRefreshPreference } from "../hooks/useRefreshPreference";
@@ -116,12 +118,10 @@ export function AlertsPage(): ReactNode {
             {criticalCount > 0 ? ` · ${criticalCount} crítica en esta página` : ""}
           </p>
         </div>
-        <RefreshControls
-          onReload={page.reload}
-          loading={page.loading}
-          updatedAt={page.updatedAt}
-          preference={preference}
-        />
+        <div className="page__actions">
+          <ExportLinks kind="alerts" />
+          <RefreshControls onReload={page.reload} loading={page.loading} updatedAt={page.updatedAt} preference={preference} />
+        </div>
       </header>
 
       <AlertFilters
@@ -211,7 +211,7 @@ function AlertRow({ alert }: { alert: AlertPage["items"][number] }): ReactNode {
         </Link>
       </td>
       <td className="table__mono">{alert.rule_id}</td>
-      <td className="table__mono">{alert.source_ip ?? "—"}</td>
+      <td className="table__mono">{alert.source_ip ?? "—"}<IpCountry countryCode={alert.country_code} countryName={alert.country_name} /></td>
       <td>{formatNumber(alert.event_count)}</td>
       <td>
         <Link

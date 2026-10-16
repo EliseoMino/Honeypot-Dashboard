@@ -18,6 +18,7 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -92,6 +93,7 @@ class IngestPipeline:
         self._first_pending_at: float | None = None
         self._sequence = (self._checkpoint.sequence or 0) if self._checkpoint else 0
         self._stopping = False
+        self._last_heartbeat_at: float | None = None
         self.stats = Stats()
 
     @property
@@ -116,6 +118,7 @@ class IngestPipeline:
         try:
             while not self._stopping:
                 self.run_once()
+                self._maybe_heartbeat()
                 self._sleep(self._settings.poll_interval)
         finally:
             self.shutdown()
@@ -167,6 +170,28 @@ class IngestPipeline:
         if self._first_pending_at is None:
             return False
         return self._monotonic() - self._first_pending_at >= self._settings.flush_interval
+
+    def _maybe_heartbeat(self) -> None:
+        now = self._monotonic()
+        if self._last_heartbeat_at is not None and now - self._last_heartbeat_at < self._settings.heartbeat_interval:
+            return
+        heartbeat = getattr(self._client, "heartbeat", None)
+        if not callable(heartbeat):
+            self._last_heartbeat_at = now
+            return
+        heartbeat({
+            "agent_id": self._settings.agent_id,
+            "checkpoint_offset": self.checkpoint.offset,
+            "pending_records": len(self._pending),
+            "malformed_lines": self.stats.malformed_lines,
+            "delivery_failures": self.stats.delivery_failures,
+            "log_offset": self._tailer.offset,
+            "log_size_bytes": _file_size(self._tailer.path),
+            "log_inode": self._tailer.inode,
+            "rotations": self.stats.rotations,
+            "truncations": self.stats.truncations,
+        })
+        self._last_heartbeat_at = now
 
     def _flush(self) -> int:
         batch = self._pending[: self._settings.batch_size]
@@ -270,6 +295,13 @@ def _acknowledged_offset(acknowledgement: dict[str, Any]) -> int | None:
         return None
     offset = checkpoint.get("offset")
     return offset if isinstance(offset, int) else None
+
+
+def _file_size(path: Any) -> int | None:
+    try:
+        return Path(path).stat().st_size
+    except (OSError, TypeError, ValueError):
+        return None
 
 
 def build_pipeline(settings: AgentSettings | None = None) -> IngestPipeline:

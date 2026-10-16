@@ -154,6 +154,22 @@ async def test_sessions_are_paged(backend, cowrie_event) -> None:
     assert first.json()["items"][0]["session_id"] != second.json()["items"][0]["session_id"]
 
 
+async def test_session_timeline_returns_safe_events_in_ascending_order(backend, cowrie_event) -> None:
+    await backend.ingest(cowrie_event)
+
+    response = await backend.client.get("/api/v1/sessions/sess-2")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["session_id"] == "sess-2"
+    assert [event["event_type"] for event in payload["events"]] == ["command.input", "transfer.download"]
+    assert all("raw" not in event and "details" not in event for event in payload["events"])
+
+
+async def test_unknown_session_timeline_is_not_found(backend) -> None:
+    assert (await backend.client.get("/api/v1/sessions/no-such-session")).status_code == 404
+
+
 # RF-09
 
 

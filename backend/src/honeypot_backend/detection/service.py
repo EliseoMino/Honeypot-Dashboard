@@ -85,7 +85,7 @@ class DetectionService:
         consumer can show a rule without knowing every kind.
         """
 
-        common = ("id", "kind", "title", "description", "severity")
+        common = ("id", "kind", "title", "description", "severity", "attack")
         return {
             "available": self.available,
             "path": str(self.path) if self.path is not None else None,
@@ -97,7 +97,7 @@ class DetectionService:
                     "parameters": {
                         key: value
                         for key, value in rule.model_dump(mode="json").items()
-                        if key not in common
+                        if key not in (*common, "attack")
                     },
                 }
                 for rule in self.rules.rules

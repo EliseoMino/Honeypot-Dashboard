@@ -96,6 +96,7 @@ class RuleDescription(BaseModel):
     title: str
     description: str
     severity: str
+    attack: list[dict[str, str]] = Field(default_factory=list)
     parameters: dict[str, Any]
 
 

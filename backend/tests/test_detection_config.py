@@ -192,6 +192,20 @@ def test_the_rules_endpoint_reports_the_configured_parameters(tmp_path) -> None:
     assert described["rules"][0]["severity"] == "high"
 
 
+def test_rule_description_keeps_attack_mapping_separate_from_detection_parameters(tmp_path) -> None:
+    content = VALID.replace(
+        'severity = "high"',
+        'severity = "high"\nattack = [{ tactic_id = "TA0006", tactic_name = "Credential Access", technique_id = "T1110.001", technique_name = "Password Guessing", rationale = "Repeated authentication attempts match a password guessing pattern." }]',
+    )
+    service = DetectionService.from_settings(
+        Settings(detection_rules_path=write(tmp_path, content))
+    )
+
+    rule = service.describe()["rules"][0]
+    assert rule["attack"][0]["technique_id"] == "T1110.001"
+    assert "attack" not in rule["parameters"]
+
+
 class TestInvokedCommands:
     """Which executables a command line runs, for the command rule."""
 

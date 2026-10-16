@@ -259,4 +259,22 @@ Los contenedores sueltos que quedaron de pruebas anteriores también cuentan.
   deliberado delante.
 - No commitear registros reales del honeypot. `infrastructure/cowrie/data`
   ignora su contenido por directorio, pero revisa `git status` antes de commitear.
-- La fase de despliegue en VPS queda fuera del alcance actual.
+- El despliegue privado en VPS se documenta en `docs/deployment/coolify.md`.
+
+## InvestigaciÃ³n SOC
+
+- `/sessions/<session_id>` presenta una cronologÃ­a paginada con metadatos
+  seguros y las alertas asociadas.
+- `/rules` muestra las condiciones deterministas cargadas desde
+  `infrastructure/detection/rules.toml`, su severidad y los mapeos ATT&CK
+  justificados.
+- Eventos y alertas se descargan en CSV o JSON con los filtros activos; tambiÃ©n
+  hay un informe JSON agregado. Se excluyen credenciales, payload Cowrie,
+  comandos completos y notas del operador; cada exportaciÃ³n tiene un lÃ­mite de
+  10.000 filas.
+- El panel de ingesta muestra heartbeats, backlog, fallos de entrega y
+  truncamientos. Las mÃ©tricas persisten en el volumen del spool.
+- PaÃ­s y bandera son opcionales: una base GeoLite2 Country local en
+  `infrastructure/geoip/GeoLite2-Country.mmdb` evita enviar IPs a servicios
+  externos. La base no se versiona. La geolocalizaciÃ³n es aproximada y no
+  representa la ubicaciÃ³n fÃ­sica de una persona.

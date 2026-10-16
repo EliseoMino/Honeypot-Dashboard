@@ -23,6 +23,7 @@ venv
 .env.*.local
 var/
 infrastructure/cowrie/data/
+infrastructure/geoip/*.mmdb
 
 # Build output and editor state
 dashboard/dist

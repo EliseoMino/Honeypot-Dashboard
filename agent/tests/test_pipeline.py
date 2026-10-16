@@ -27,6 +27,7 @@ class FakeClient:
         self.sent: list[dict[str, Any]] = []
         self.failures: list[DeliveryError] = []
         self.closed = False
+        self.heartbeats: list[dict[str, Any]] = []
         self._offset_of = offset_of or (lambda payload: payload["checkpoint"]["offset"])
 
     def send_with_retry(self, payload: dict[str, Any], *, sleep: Callable[[float], None]) -> dict[str, Any]:
@@ -46,6 +47,9 @@ class FakeClient:
     def close(self) -> None:
         self.closed = True
 
+    def heartbeat(self, payload: dict[str, Any]) -> None:
+        self.heartbeats.append(payload)
+
     @property
     def events_sent(self) -> list[dict[str, Any]]:
         return [event for batch in self.sent for event in batch["events"]]
@@ -58,6 +62,17 @@ def client() -> FakeClient:
 
 def build(settings: AgentSettings, client: FakeClient) -> IngestPipeline:
     return IngestPipeline(settings, client=client, sleep=lambda _: None)
+
+
+def test_pipeline_reports_agent_health_heartbeat(settings: AgentSettings, client: FakeClient) -> None:
+    pipeline = build(settings, client)
+    pipeline._maybe_heartbeat()
+
+    assert len(client.heartbeats) == 1
+    heartbeat = client.heartbeats[0]
+    assert heartbeat["agent_id"] == settings.agent_id
+    assert heartbeat["pending_records"] == 0
+    assert "truncations" in heartbeat
 
 
 def test_a_batch_is_delivered_and_the_checkpoint_advances(

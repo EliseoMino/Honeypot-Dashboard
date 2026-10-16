@@ -11,6 +11,7 @@ import ssl
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TLS_VERSIONS: dict[str, ssl.TLSVersion] = {
@@ -46,6 +47,7 @@ class AgentSettings(BaseSettings):
     max_pending_records: int = 10_000
     flush_interval: float = 2.0
     poll_interval: float = 0.5
+    heartbeat_interval: float = Field(default=30.0, gt=0)
 
     max_retries: int = 5
     backoff_initial: float = 0.5

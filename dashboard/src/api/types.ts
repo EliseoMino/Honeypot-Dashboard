@@ -26,6 +26,8 @@ export interface NormalizedEvent {
   sensor: string | null;
   session_id: string | null;
   source_ip: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
   source_port: number | null;
   destination_ip: string | null;
   destination_port: number | null;
@@ -96,6 +98,8 @@ export interface Alert {
   title: string;
   description: string;
   source_ip: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
   session_id: string | null;
   occurred_from: string;
   occurred_to: string;
@@ -117,11 +121,13 @@ export interface AlertStatusChange {
   changed_at: string;
 }
 
+export type AlertListItem = Omit<Alert, "evidence" | "notes" | "false_positive_reason">;
+
 export interface AlertPage {
   total: number;
   limit: number;
   offset: number;
-  items: Omit<Alert, "evidence">[];
+  items: AlertListItem[];
 }
 
 export const ALERT_SEVERITIES: readonly AlertSeverity[] = [
@@ -160,6 +166,8 @@ export function severityRank(severity: AlertSeverity): number {
 export interface SessionSummary {
   session_id: string;
   source_ip: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
   first_seen: string | null;
   last_seen: string | null;
   duration_ms: number | null;
@@ -178,12 +186,23 @@ export interface SessionPage {
   items: SessionSummary[];
 }
 
+export interface SessionTimeline {
+  summary: SessionSummary;
+  total: number;
+  limit: number;
+  offset: number;
+  events: EventListItem[];
+  alerts: Array<Pick<Alert, "id" | "title" | "severity" | "status" | "generated_at" | "source_ip" | "country_code" | "country_name">>;
+}
+
 /** Types mirroring `honeypot_backend.api.commands` (RF-09). */
 export interface CommandRecord {
   event_id: string;
   event_type: string;
   occurred_at: string | null;
   source_ip: string | null;
+  country_code?: string | null;
+  country_name?: string | null;
   session_id: string | null;
   username: string | null;
   outcome: string | null;
@@ -198,8 +217,11 @@ export interface CommandPage {
   items: CommandRecord[];
 }
 
-/** Types mirroring `honeypot_backend.api.sources` (RF-10). */export interface SourceActivity {
+/** Types mirroring `honeypot_backend.api.sources` (RF-10). */
+export interface SourceActivity {
   source_ip: string;
+  country_code?: string | null;
+  country_name?: string | null;
   event_count: number;
   session_count: number;
   auth_attempts: number;
@@ -237,6 +259,30 @@ export interface TimeSeries {
   points: SeriesPoint[];
 }
 
+export interface DetectionRule {
+  id: string;
+  kind: string;
+  title: string;
+  description: string;
+  severity: AlertSeverity;
+  attack: Array<{
+    tactic_id: string;
+    tactic_name: string;
+    technique_id: string;
+    technique_name: string;
+    rationale: string;
+  }>;
+  parameters: Record<string, unknown>;
+}
+
+export interface DetectionRuleSet {
+  available: boolean;
+  path: string | null;
+  error: string | null;
+  version: number;
+  rules: DetectionRule[];
+}
+
 export interface IngestStats {
   metrics: {
     last_batch_at: string | null;
@@ -248,6 +294,21 @@ export interface IngestStats {
     sequence_gaps: number;
     sequence_replays: number;
   };
+  agents: Array<{
+    agent_id: string;
+    last_heartbeat_at: string;
+    age_seconds: number;
+    status: "active" | "stale";
+    checkpoint_offset: number;
+    pending_records: number;
+    malformed_lines: number;
+    delivery_failures: number;
+    log_offset: number;
+    log_size_bytes: number | null;
+    log_inode: number | null;
+    rotations: number;
+    truncations: number;
+  }>;
   spool: Record<string, unknown>;
   replayer: {
     events_loaded: number;

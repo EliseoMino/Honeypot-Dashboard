@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from honeypot_backend import __version__
-from honeypot_backend.api import alerts, commands, detections, events, health, ingest, sessions, sources
+from honeypot_backend.api import alerts, commands, detections, events, exports, health, ingest, sessions, sources
 from honeypot_backend.config import Settings, get_settings
 from honeypot_backend.db.session import apply_migrations, dispose_engines, get_engine
 from honeypot_backend.detection import DetectionService
@@ -18,6 +18,7 @@ from honeypot_backend.ingest.dedupe import RecentEventIds
 from honeypot_backend.ingest.metrics import IngestMetrics
 from honeypot_backend.ingest.replayer import NormalizedSpoolReplayer
 from honeypot_backend.ingest.spool import EventSpool
+from honeypot_backend.geoip import CountryLookup
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     replayer = NormalizedSpoolReplayer(
         resolved, spool.normalized_dir, detection=detection
     )
-    metrics = IngestMetrics()
+    metrics = IngestMetrics(resolved.spool_dir / "ingest-health.json")
+    country_lookup = CountryLookup(resolved.geoip_db_path)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -72,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except TimeoutError:
                     task.cancel()
             spool.close()
+            country_lookup.close()
             await dispose_engines()
             logger.info("backend stopped")
 
@@ -87,6 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.dedupe = RecentEventIds(capacity=resolved.dedupe_window)
     app.state.replayer = replayer
     app.state.detection = detection
+    app.state.country_lookup = country_lookup
 
     app.include_router(health.router)
     app.include_router(ingest.router)
@@ -96,4 +100,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sources.router)
     app.include_router(detections.router)
     app.include_router(alerts.router)
+    app.include_router(exports.router)
     return app

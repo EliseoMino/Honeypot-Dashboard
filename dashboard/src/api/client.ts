@@ -12,10 +12,12 @@ import type {
   CommandPage,
   EventPage,
   EventSummary,
+  DetectionRuleSet,
   IngestStats,
   NormalizedEvent,
   Order,
   SessionPage,
+  SessionTimeline,
   SourceDetail,
   SourcePage,
   TimeBucket,
@@ -138,6 +140,10 @@ export function fetchIngestStats(signal?: AbortSignal): Promise<IngestStats> {
   return request<IngestStats>("/api/v1/ingest/stats", signal);
 }
 
+export function fetchDetectionRules(signal?: AbortSignal): Promise<DetectionRuleSet> {
+  return request<DetectionRuleSet>("/api/v1/detections/rules", signal);
+}
+
 export function fetchTimeSeries(
   bucket: TimeBucket,
   signal?: AbortSignal,
@@ -231,6 +237,18 @@ export function fetchSessionPage(
   const { sourceIp, username, limit, offset } = query;
   return request<SessionPage>(
     `/api/v1/sessions${queryString({ source_ip: sourceIp, username, limit, offset })}`,
+    signal,
+  );
+}
+
+export function fetchSessionTimeline(
+  sessionId: string,
+  limit: number,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<SessionTimeline> {
+  return request<SessionTimeline>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}${queryString({ limit, offset })}`,
     signal,
   );
 }

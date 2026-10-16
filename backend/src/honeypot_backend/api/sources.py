@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,7 @@ from honeypot_backend.db.repository import (
     EventRepository,
 )
 from honeypot_backend.db.session import get_session
+from honeypot_backend.api.geo import with_country
 
 router = APIRouter(prefix="/api/v1/sources", tags=["sources"])
 
@@ -30,6 +32,8 @@ class SourceActivity(BaseModel):
     """Everything one attacker address did."""
 
     source_ip: str
+    country_code: str | None = None
+    country_name: str | None = None
     event_count: int
     session_count: int = Field(description="Distinct sessions this address opened")
     auth_attempts: int
@@ -65,6 +69,7 @@ async def _source_filters(
 
 @router.get("", response_model=SourcePage, summary="Activity grouped by source IP")
 async def list_sources(
+    request: Request,
     filters: Annotated[EventFilters, Depends(_source_filters)],
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -77,13 +82,14 @@ async def list_sources(
         total=page["total"],
         limit=page["limit"],
         offset=page["offset"],
-        items=[SourceActivity(**item) for item in page["items"]],
+        items=[SourceActivity(**with_country(request, item)) for item in page["items"]],
     )
 
 
 @router.get("/{source_ip}", response_model=SourceDetail, summary="Activity of one source IP")
 async def get_source(
     source_ip: str,
+    request: Request,
     filters: Annotated[EventFilters, Depends(_source_filters)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SourceDetail:
@@ -112,4 +118,4 @@ async def get_source(
             detail=f"no events were recorded for {source_ip}",
         )
     by_category = (await repository.summary(scoped))["by_category"]
-    return SourceDetail(**page["items"][0], by_category=by_category)
+    return SourceDetail(**with_country(request, page["items"][0]), by_category=by_category)

@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { fetchAlert, fetchAlertHistory, updateAlertTriage } from "../api/client";
 import type { AlertStatus } from "../api/types";
 import { ErrorBanner, Loading } from "../components/Feedback";
+import { IpCountry } from "../components/IpCountry";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime, formatNumber } from "../utils/format";
 
@@ -59,7 +60,10 @@ export function AlertDetailPage(): ReactNode {
 
   const data = alert.data;
   const eventIds = evidenceEventIds(data.evidence);
-  const evidence = Object.entries(data.evidence).filter(([key]) => key !== "event_ids");
+  const evidence = Object.entries(data.evidence).filter(([key]) => key !== "event_ids" && key !== "attack_mapping");
+  const attackMappings = Array.isArray(data.evidence.attack_mapping)
+    ? data.evidence.attack_mapping.filter((entry): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+    : [];
 
   return (
     <div className="page">
@@ -82,6 +86,28 @@ export function AlertDetailPage(): ReactNode {
       </header>
 
       <div className="panels">
+        {attackMappings.length > 0 ? (
+          <section className="panel">
+            <h2 className="panel__title">Mapeo MITRE ATT&amp;CK</h2>
+            <ul className="evidence-list">
+              {attackMappings.map((mapping, index) => {
+                const techniqueId = typeof mapping.technique_id === "string" ? mapping.technique_id : "";
+                const techniquePath = techniqueId.match(/^(T\d{4})(?:\.(\d{3}))?$/);
+                const href = techniquePath
+                  ? `https://attack.mitre.org/techniques/${techniquePath[1]}/${techniquePath[2] ? `${techniquePath[2]}/` : ""}`
+                  : undefined;
+                return (
+                  <li key={`${techniqueId}-${index}`}>
+                    <strong>{typeof mapping.technique_name === "string" ? mapping.technique_name : "Técnica"} ({techniqueId})</strong>
+                    {href ? <> · <a className="link" href={href} target="_blank" rel="noreferrer">Ver en MITRE ATT&amp;CK</a></> : null}
+                    <p>{typeof mapping.rationale === "string" ? mapping.rationale : ""}</p>
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="page__subtitle">Asociación orientativa de la regla; no atribuye identidad ni confirma ejecución fuera del honeypot.</p>
+          </section>
+        ) : null}
         <section className="panel">
           <h2 className="panel__title">Gestión de la alerta</h2>
           <label className="field">
@@ -167,7 +193,7 @@ export function AlertDetailPage(): ReactNode {
                     className="link"
                     to={`/events?source_ip=${encodeURIComponent(data.source_ip)}`}
                   >
-                    {data.source_ip}
+                    {data.source_ip}<IpCountry countryCode={data.country_code} countryName={data.country_name} />
                   </Link>
                 )}
               </dd>

@@ -5,6 +5,7 @@ import { fetchSource } from "../api/client";
 import { BreakdownList } from "../components/BreakdownList";
 import { ErrorBanner, Loading } from "../components/Feedback";
 import { MetricCard } from "../components/MetricCard";
+import { IpCountry } from "../components/IpCountry";
 import { useResource } from "../hooks/useResource";
 import { formatDateTime, formatNumber } from "../utils/format";
 
@@ -47,7 +48,7 @@ export function SourceDetailPage(): ReactNode {
 
       <header className="page__header">
         <div>
-          <h1 className="mono">{ip}</h1>
+          <h1 className="mono">{ip}<IpCountry countryCode={data.country_code} countryName={data.country_name} /></h1>
           <p className="page__subtitle">
             {formatNumber(data.session_count)} sesiones · primer evento{" "}
             {formatDateTime(data.first_seen)} · último evento {formatDateTime(data.last_seen)}

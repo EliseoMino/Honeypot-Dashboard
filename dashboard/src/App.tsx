@@ -9,9 +9,11 @@ import { EventDetailPage } from "./pages/EventDetailPage";
 import { EventsPage } from "./pages/EventsPage";
 import { IngestHealthPage } from "./pages/IngestHealthPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { SourceDetailPage } from "./pages/SourceDetailPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { SummaryPage } from "./pages/SummaryPage";
+import { RulesPage } from "./pages/RulesPage";
 
 export function App(): ReactNode {
   return (
@@ -24,6 +26,9 @@ export function App(): ReactNode {
           </NavLink>
           <NavLink className="app__link" to="/alerts">
             Alertas
+          </NavLink>
+          <NavLink className="app__link" to="/rules">
+            Reglas
           </NavLink>
           <NavLink className="app__link" to="/events">
             Eventos
@@ -48,10 +53,12 @@ export function App(): ReactNode {
           <Route path="/" element={<SummaryPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/alerts/:alertId" element={<AlertDetailPage />} />
+          <Route path="/rules" element={<RulesPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/:eventId" element={<EventDetailPage />} />
           <Route path="/health" element={<IngestHealthPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
           <Route path="/commands" element={<CommandsPage />} />
           <Route path="/sources" element={<SourcesPage />} />
           <Route path="/sources/:sourceIp" element={<SourceDetailPage />} />

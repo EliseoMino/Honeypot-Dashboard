@@ -92,6 +92,16 @@ class IngestClient:
             raise DeliveryError("invalid acknowledgement payload: expected a JSON object", transient=True)
         return body
 
+    def heartbeat(self, payload: dict[str, Any]) -> None:
+        """Send a best-effort agent liveness signal over the same mTLS client."""
+
+        url = self._settings.backend_url.rsplit("/", 1)[0] + "/heartbeat"
+        try:
+            response = self._client.post(url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("agent heartbeat delivery failed: %s", exc)
+
     def send_with_retry(
         self,
         payload: dict[str, Any],

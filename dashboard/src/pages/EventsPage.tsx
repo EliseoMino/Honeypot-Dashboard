@@ -11,6 +11,8 @@ import {
   type EventFilterValues,
 } from "../components/EventFilters";
 import { Pagination } from "../components/Pagination";
+import { ExportLinks } from "../components/ExportLinks";
+import { IpCountry } from "../components/IpCountry";
 import { RefreshControls } from "../components/RefreshControls";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useRefreshPreference } from "../hooks/useRefreshPreference";
@@ -132,12 +134,10 @@ export function EventsPage(): ReactNode {
             {isFiltered(filters) ? "Resultados filtrados" : "Todos los eventos almacenados"}
           </p>
         </div>
-        <RefreshControls
-          onReload={page.reload}
-          loading={page.loading}
-          updatedAt={page.updatedAt}
-          preference={preference}
-        />
+        <div className="page__actions">
+          <ExportLinks kind="events" />
+          <RefreshControls onReload={page.reload} loading={page.loading} updatedAt={page.updatedAt} preference={preference} />
+        </div>
       </header>
 
       <EventFilters
@@ -226,7 +226,7 @@ function EventRow({ event }: { event: EventListItem }): ReactNode {
         </Link>
       </td>
       <td>{event.event_category}</td>
-      <td className="table__mono">{event.source_ip ?? "—"}</td>
+      <td className="table__mono">{event.source_ip ?? "—"}<IpCountry countryCode={event.country_code} countryName={event.country_name} /></td>
       <td className="table__mono">{event.session_id ?? "—"}</td>
       <td>{event.username ?? "—"}</td>
       <td>

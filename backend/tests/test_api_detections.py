@@ -84,6 +84,7 @@ description = "Several failed attempts in a short period."
 threshold = 4
 window_seconds = 600
 severity = "high"
+attack = [{ tactic_id = "TA0006", tactic_name = "Credential Access", technique_id = "T1110.001", technique_name = "Password Guessing", rationale = "Repeated authentication attempts match a password guessing pattern." }]
 
 [[rule]]
 id = "command_of_interest"
@@ -203,6 +204,7 @@ async def test_the_auth_rule_counts_the_attempts_of_one_ip(backend) -> None:
     assert auth["event_count"] == 5
     assert auth["source_ip"] == "203.0.113.10"
     assert auth["occurred_from"].startswith("2026-03-01T12:00:00")
+    assert auth["evidence"]["attack_mapping"][0]["technique_id"] == "T1110.001"
     # The evidence has to identify the events that triggered the detection.
     assert len(auth["evidence"]["event_ids"]) == 5
     assert auth["evidence"]["window_seconds"] == 600

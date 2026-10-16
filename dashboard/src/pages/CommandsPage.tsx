@@ -11,6 +11,7 @@ import {
 } from "../components/AggregateFilters";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import { Pagination } from "../components/Pagination";
+import { IpCountry } from "../components/IpCountry";
 import { RefreshControls } from "../components/RefreshControls";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useRefreshPreference } from "../hooks/useRefreshPreference";
@@ -216,7 +217,7 @@ function CommandRow({ command }: { command: CommandRecord }): ReactNode {
           "—"
         ) : (
           <Link className="link" to={`/sources/${encodeURIComponent(command.source_ip)}`}>
-            {command.source_ip}
+            {command.source_ip}<IpCountry countryCode={command.country_code} countryName={command.country_name} />
           </Link>
         )}
       </td>

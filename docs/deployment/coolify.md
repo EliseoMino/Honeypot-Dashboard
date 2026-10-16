@@ -132,6 +132,21 @@ agent checkpoint volumes are independent of the PKI volumes.
 
 The agent checkpoint is persistent, so a redeploy resumes from the acknowledged
 Cowrie log offset (`AGENT_START_AT_END=true` in `compose.coolify.yaml`).
+Ingestion health counters and the last agent heartbeat are stored in
+`ingest-health.json` in that same spool volume. They survive normal backend
+restarts and redeploys; clearing the spool volume also clears this monitoring
+history.
+
+## Optional IP country flags
+
+The backend can enrich source IPs from a local MaxMind GeoLite2 Country
+database. Put `GeoLite2-Country.mmdb` in `infrastructure/geoip` on the VPS and
+restart/redeploy the backend. The directory is mounted read only. The file is
+ignored by Git and must not be committed. Follow MaxMind's current account,
+license and update requirements when obtaining it. If it is absent, all
+country fields remain empty and the dashboard works without flags. No attacker
+IP is sent to a public geolocation API; country results are approximate and
+must not be treated as evidence of a person's physical location.
 
 Config that the containers read from the repository (Cowrie `cowrie.cfg`,
 detection `rules.toml`) is mounted read-only and changes on redeploy.

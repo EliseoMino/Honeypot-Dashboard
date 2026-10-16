@@ -8,12 +8,14 @@ EXPECTED_ROUTES = {
     ("GET", "/healthz"),
     ("GET", "/readyz"),
     ("POST", "/api/v1/ingest/events"),
+    ("POST", "/api/v1/ingest/heartbeat"),
     ("GET", "/api/v1/ingest/stats"),
     ("GET", "/api/v1/events"),
     ("GET", "/api/v1/events/summary"),
     ("GET", "/api/v1/events/timeseries"),
     ("GET", "/api/v1/events/{event_id}"),
     ("GET", "/api/v1/sessions"),
+    ("GET", "/api/v1/sessions/{session_id}"),
     ("GET", "/api/v1/commands"),
     ("GET", "/api/v1/sources"),
     ("GET", "/api/v1/sources/{source_ip}"),
@@ -24,6 +26,9 @@ EXPECTED_ROUTES = {
     ("GET", "/api/v1/alerts/{alert_id}"),
     ("PATCH", "/api/v1/alerts/{alert_id}/triage"),
     ("GET", "/api/v1/alerts/{alert_id}/history"),
+    ("GET", "/api/v1/exports/events.{format}"),
+    ("GET", "/api/v1/exports/alerts.{format}"),
+    ("GET", "/api/v1/exports/report.json"),
 }
 
 

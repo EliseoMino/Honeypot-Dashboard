@@ -5,6 +5,7 @@ import { fetchSourcePage, MAX_LIMIT } from "../api/client";
 import type { SourceActivity } from "../api/types";
 import { EmptyState, ErrorBanner, Loading } from "../components/Feedback";
 import { Pagination } from "../components/Pagination";
+import { IpCountry } from "../components/IpCountry";
 import { RefreshControls } from "../components/RefreshControls";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { useRefreshPreference } from "../hooks/useRefreshPreference";
@@ -157,7 +158,7 @@ function SourceRow({ source }: { source: SourceActivity }): ReactNode {
     <tr>
       <td className="table__mono">
         <Link className="link" to={`/sources/${encodeURIComponent(ip)}`}>
-          {ip}
+          {ip}<IpCountry countryCode={source.country_code} countryName={source.country_name} />
         </Link>
       </td>
       <td>{formatNumber(source.event_count)}</td>

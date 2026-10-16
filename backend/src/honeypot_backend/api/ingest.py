@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from honeypot_backend.api.schemas import CheckpointInfo, IngestBatch, IngestResponse, RejectedEvent
 from honeypot_backend.config import Settings
@@ -31,6 +32,19 @@ from honeypot_backend.normalization import NormalizationError, normalize
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ingest", tags=["ingest"])
+
+
+class AgentHeartbeat(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=128)
+    checkpoint_offset: int = Field(ge=0)
+    pending_records: int = Field(ge=0)
+    malformed_lines: int = Field(ge=0)
+    delivery_failures: int = Field(ge=0)
+    log_offset: int = Field(ge=0)
+    log_size_bytes: int | None = Field(default=None, ge=0)
+    log_inode: int | None = Field(default=None, ge=0)
+    rotations: int = Field(ge=0)
+    truncations: int = Field(ge=0)
 
 
 def _spool(request: Request) -> EventSpool:
@@ -143,6 +157,16 @@ def ingest_events(batch: IngestBatch, request: Request) -> IngestResponse:
     )
 
 
+@router.post("/heartbeat", status_code=status.HTTP_204_NO_CONTENT, summary="Record agent liveness")
+def ingest_heartbeat(body: AgentHeartbeat, request: Request) -> None:
+    """Accept an authenticated heartbeat over the same mTLS-only API."""
+
+    _metrics(request).record_heartbeat(
+        agent_id=body.agent_id,
+        state=body.model_dump(exclude={"agent_id"}),
+    )
+
+
 @router.get("/stats", summary="Ingestion counters and RF-01 event coverage")
 def ingest_stats(request: Request) -> dict[str, Any]:
     """Expose ingestion counters, spool state and required event coverage."""
@@ -173,10 +197,24 @@ def ingest_stats(request: Request) -> dict[str, Any]:
         disk_state = {"free_bytes": disk.free, "total_bytes": disk.total}
     except OSError:
         disk_state = {"free_bytes": None, "total_bytes": None}
+    metrics = _metrics(request).snapshot()
+    now = datetime.now(UTC)
+    agents = []
+    for agent_id, heartbeat in metrics.get("last_heartbeat_by_agent", {}).items():
+        seen = datetime.fromisoformat(heartbeat)
+        age_seconds = max(0, int((now - seen).total_seconds()))
+        agents.append({
+            "agent_id": agent_id,
+            "last_heartbeat_at": heartbeat,
+            "age_seconds": age_seconds,
+            "status": "active" if age_seconds <= 90 else "stale",
+            **metrics.get("agent_state", {}).get(agent_id, {}),
+        })
     return {
         "spool_dir": str(settings.spool_dir),
         "max_batch_events": settings.max_batch_events,
-        "metrics": _metrics(request).snapshot(),
+        "metrics": metrics,
+        "agents": agents,
         "spool": _spool(request).stats(),
         "dedupe_window_size": len(_dedupe(request)),
         "replayer": replayer.stats() if replayer is not None else None,

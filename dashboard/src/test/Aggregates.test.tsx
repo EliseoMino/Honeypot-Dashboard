@@ -84,7 +84,7 @@ describe("RF-08 consulta de sesiones", () => {
     renderAt(<SessionsPage />, "/sessions");
 
     const sessionLink = await screen.findByRole("link", { name: "sess-1" });
-    expect(sessionLink.getAttribute("href")).toBe("/events?session_id=sess-1");
+    expect(sessionLink.getAttribute("href")).toBe("/sessions/sess-1");
 
     const ipLink = screen.getByRole("link", { name: "203.0.113.10" });
     expect(ipLink.getAttribute("href")).toBe("/sources/203.0.113.10");

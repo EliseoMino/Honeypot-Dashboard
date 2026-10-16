@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     detection_rules_path: Path | None = Path("infrastructure/detection/rules.toml")
     detection_default_lookback: int = 24 * 3600
 
+    # Optional offline GeoIP database. No address is sent to a third party.
+    geoip_db_path: Path | None = None
+
     @property
     def tls_version(self) -> ssl.TLSVersion:
         try:

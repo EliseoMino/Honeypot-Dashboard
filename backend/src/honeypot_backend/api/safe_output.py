@@ -15,6 +15,7 @@ SAFE_EVIDENCE_KEYS = frozenset(
         "matched_commands",
         "sessions",
         "usernames",
+        "attack_mapping",
     }
 )
 
