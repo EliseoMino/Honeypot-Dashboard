@@ -261,7 +261,7 @@ Los contenedores sueltos que quedaron de pruebas anteriores también cuentan.
   ignora su contenido por directorio, pero revisa `git status` antes de commitear.
 - El despliegue privado en VPS se documenta en `docs/deployment/coolify.md`.
 
-## InvestigaciÃ³n SOC
+## Investigación SOC
 
 - `/sessions/<session_id>` presenta una cronologÃ­a paginada con metadatos
   seguros y las alertas asociadas.
